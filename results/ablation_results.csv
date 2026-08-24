@@ -1,0 +1,7 @@
+model,c_index,brier,accuracy,arm,seed
+full_s0,0.6059,0.192,0.7326,full,0
+full_s1,0.6321,0.1918,0.7326,full,1
+cond_s0,0.5885,0.197,0.7326,cond,0
+cond_s1,0.5109,0.197,0.7326,cond,1
+lob_s0,0.5265,0.1974,0.7326,lob,0
+lob_s1,0.4678,0.1969,0.7326,lob,1
