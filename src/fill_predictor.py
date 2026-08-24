@@ -52,6 +52,8 @@ from torch.utils.data import DataLoader, Dataset
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 LOOKBACK        = 50        # Snapshots per training window (reduced for speed)
+MAX_OFFSET_TICKS = 5.0      # Largest quote offset in the label grid (1,2,3,5)
+COND_DIM        = 3         # Quote conditioning: [latency_norm, offset_norm, side]
 LATENCY_WINDOWS = [200, 500, 1000, 2000]
 BATCH_SIZE      = 256
 LEARNING_RATE   = 1e-3
@@ -88,9 +90,15 @@ class FillDataset(Dataset):
 
     Each sample is:
       x       : (LOOKBACK, n_features) tensor of LOB snapshots
-      latency : scalar latency window in ms (normalized)
+      cond    : (3,) quote conditioning vector — [latency_norm, offset_norm, side]
       t_obs   : observed time (fill time or censoring time) in ms
       delta   : 1 if filled, 0 if censored
+
+    NOTE: `cond` carries the quote's own offset and side in addition to the
+    latency window. These are the dominant determinants of fill probability
+    (offset alone spans a ~0.42 range in fill rate) and were previously omitted,
+    which made every (offset, side) variant of a snapshot numerically identical
+    at the model input while carrying different labels.
     """
 
     def __init__(
@@ -99,11 +107,13 @@ class FillDataset(Dataset):
         labels: pd.DataFrame,
         lookback: int = LOOKBACK,
         max_latency: float = 2000.0,
+        max_offset: float = MAX_OFFSET_TICKS,
     ):
         self.features   = features.astype(np.float32)
         self.labels     = labels.reset_index(drop=True)
         self.lookback   = lookback
         self.max_latency = max_latency
+        self.max_offset  = max_offset
 
         # Filter to valid indices (need lookback history)
         self.valid_idx = self.labels[
@@ -120,8 +130,17 @@ class FillDataset(Dataset):
         # LOB feature window: (lookback, n_features)
         x = self.features[snap_i - self.lookback : snap_i]
 
-        # Latency window normalized to [0, 1]
+        # Quote conditioning: latency window, quote offset, side
         latency_norm = float(row["latency_ms"]) / self.max_latency
+        offset_norm  = float(row["offset"]) / self.max_offset
+
+        side_raw = row["side"]
+        if isinstance(side_raw, str):
+            side_val = 0.0 if side_raw.lower().startswith("b") else 1.0
+        else:
+            side_val = float(side_raw)
+
+        cond = np.array([latency_norm, offset_norm, side_val], dtype=np.float32)
 
         # Survival analysis targets
         fill_time = row["fill_time_ms"]
@@ -137,10 +156,31 @@ class FillDataset(Dataset):
 
         return (
             torch.tensor(x, dtype=torch.float32),
-            torch.tensor(latency_norm, dtype=torch.float32),
+            torch.from_numpy(cond),
             torch.tensor(t_obs_norm, dtype=torch.float32),
             torch.tensor(filled, dtype=torch.float32),
         )
+
+
+# ── Conditioning helper ───────────────────────────────────────────────────────
+
+def _as_cond(cond: torch.Tensor) -> torch.Tensor:
+    """
+    Normalize the conditioning argument to shape (B, COND_DIM).
+
+    Accepts either:
+      - (B, COND_DIM) : full [latency_norm, offset_norm, side] vector
+      - (B,)          : legacy latency-only scalar. Offset defaults to the
+                        tightest quote (1 tick) and side to neutral, so older
+                        callers such as rl_agent.py keep working unchanged.
+    """
+    if cond.dim() == 1:
+        B = cond.shape[0]
+        pad = cond.new_empty(B, COND_DIM - 1)
+        pad[:, 0] = 1.0 / MAX_OFFSET_TICKS   # 1-tick offset
+        pad[:, 1] = 0.5                       # side-neutral
+        return torch.cat([cond.unsqueeze(-1), pad], dim=-1)
+    return cond
 
 
 # ── Survival Loss ─────────────────────────────────────────────────────────────
@@ -234,9 +274,9 @@ class LSTMFillPredictor(nn.Module):
             batch_first=True,
             dropout=DROPOUT,
         )
-        # Latency conditioning MLP
+        # Quote conditioning MLP — latency window, offset, side
         self.latency_mlp = nn.Sequential(
-            nn.Linear(1, 16),
+            nn.Linear(COND_DIM, 16),
             nn.ReLU(),
             nn.Linear(16, 16),
         )
@@ -245,7 +285,7 @@ class LSTMFillPredictor(nn.Module):
     def forward(
         self,
         x: torch.Tensor,           # (B, L, F)
-        latency: torch.Tensor,     # (B,)
+        latency: torch.Tensor,     # (B, COND_DIM) or legacy (B,)
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Project features
         x = self.input_proj(x)                    # (B, L, H)
@@ -254,8 +294,8 @@ class LSTMFillPredictor(nn.Module):
         _, (h_n, _) = self.lstm(x)
         h = h_n[-1]                               # (B, H) — last layer hidden state
 
-        # Latency conditioning
-        lat = self.latency_mlp(latency.unsqueeze(-1))   # (B, 16)
+        # Quote conditioning (latency, offset, side)
+        lat = self.latency_mlp(_as_cond(latency))      # (B, 16)
 
         # Concatenate and decode
         combined = torch.cat([h, lat], dim=-1)    # (B, H+16)
@@ -301,9 +341,9 @@ class ConvTransformerFillPredictor(nn.Module):
             num_layers=N_TRANSFORMER_LAYERS,
         )
 
-        # Latency conditioning MLP
+        # Quote conditioning MLP — latency window, offset, side
         self.latency_mlp = nn.Sequential(
-            nn.Linear(1, 32),
+            nn.Linear(COND_DIM, 32),
             nn.ReLU(),
             nn.Linear(32, 32),
         )
@@ -314,7 +354,7 @@ class ConvTransformerFillPredictor(nn.Module):
     def forward(
         self,
         x: torch.Tensor,           # (B, L, F)
-        latency: torch.Tensor,     # (B,)
+        latency: torch.Tensor,     # (B, COND_DIM) or legacy (B,)
     ) -> tuple[torch.Tensor, torch.Tensor]:
         B, L, F = x.shape
 
@@ -328,8 +368,8 @@ class ConvTransformerFillPredictor(nn.Module):
         # Global average pooling over time
         h = x_trans.mean(dim=1)                           # (B, H)
 
-        # Latency conditioning
-        lat = self.latency_mlp(latency.unsqueeze(-1))     # (B, 32)
+        # Quote conditioning (latency, offset, side)
+        lat = self.latency_mlp(_as_cond(latency))         # (B, 32)
 
         # Concatenate and decode
         combined = torch.cat([h, lat], dim=-1)            # (B, H+32)
