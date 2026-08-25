@@ -1,0 +1,5 @@
+predictor,n_params_or_feats,auc
+Lookup table (32 cells),32,0.6372
+"GBM, conditioning only (3 features)",3,0.6372
+"GBM, full (112 features)",112,0.8264
+"LSTM (109 LOB feats, 50-snap window)",90754,0.6375
