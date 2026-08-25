@@ -552,6 +552,13 @@ def evaluate_model(
     filled_mask = delta == 1
     c_index = _concordance_index(preds[filled_mask], t_obs[filled_mask])
 
+    # ── Fill AUC ──────────────────────────────────────────────────────────────
+    # Does the model rank orders that DID fill above orders that did NOT?
+    # This is the quantity the abstention rule in Section 5.8 consumes:
+    # "is this quote likely to fill", not "how fast will it fill".
+    # Distinct from c_index, which is computed on filled orders only.
+    auc = _fill_auc(preds, delta)
+
     # ── Brier Score ───────────────────────────────────────────────────────────
     brier = np.mean((preds - delta) ** 2)
 
@@ -560,16 +567,48 @@ def evaluate_model(
 
     metrics = {
         "model":     model_name,
+        "auc":       round(float(auc), 4),
         "c_index":   round(float(c_index), 4),
         "brier":     round(float(brier), 4),
         "accuracy":  round(float(accuracy), 4),
     }
 
     logger.success(
-        f"[{model_name}] C-index: {c_index:.4f} | "
+        f"[{model_name}] AUC: {auc:.4f} | C-index: {c_index:.4f} | "
         f"Brier: {brier:.4f} | Accuracy: {accuracy:.4f}"
     )
     return metrics
+
+
+def _fill_auc(pred_fill_prob: np.ndarray, delta: np.ndarray) -> float:
+    """
+    Area under the ROC curve for the binary filled/not-filled task.
+
+    Computed exactly via the rank-sum (Mann-Whitney U) identity, with
+    ties credited 0.5 — no sampling, so it is not subject to the pair
+    subsampling noise that affects _concordance_index.
+    """
+    pos = pred_fill_prob[delta == 1]
+    neg = pred_fill_prob[delta == 0]
+    n_pos, n_neg = len(pos), len(neg)
+    if n_pos == 0 or n_neg == 0:
+        return 0.5
+
+    order = np.argsort(pred_fill_prob, kind="mergesort")
+    ranks = np.empty(len(pred_fill_prob), dtype=float)
+    sorted_scores = pred_fill_prob[order]
+
+    # Average ranks within tied score groups
+    i = 0
+    while i < len(sorted_scores):
+        j = i
+        while j + 1 < len(sorted_scores) and sorted_scores[j + 1] == sorted_scores[i]:
+            j += 1
+        ranks[order[i:j + 1]] = 0.5 * (i + j) + 1.0
+        i = j + 1
+
+    rank_sum_pos = ranks[delta == 1].sum()
+    return (rank_sum_pos - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
 
 
 def _concordance_index(pred_fill_prob: np.ndarray, fill_times: np.ndarray) -> float:
