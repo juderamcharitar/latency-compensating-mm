@@ -1,2 +1,2 @@
-model,c_index,brier,accuracy
-LSTM,0.6266,0.1909,0.7326
+model,auc,c_index,brier,accuracy
+LSTM,0.6375,0.6554,0.1918,0.7326

@@ -94,14 +94,23 @@ def main():
     Path("results").mkdir(exist_ok=True)
     df.to_csv("results/ablation_results.csv", index=False)
 
-    summary = df.groupby("arm")["c_index"].agg(["mean", "std", "min", "max"])
-    order = [a for a in ("full", "cond", "lob") if a in summary.index]
-    summary = summary.loc[order]
+    order = [a for a in ("full", "cond", "lob") if a in set(df["arm"])]
 
-    print("\n" + "=" * 66)
-    print("ABLATION — C-index by arm")
-    print("=" * 66)
-    print(summary.to_string())
+    # AUC is the metric the abstention rule consumes: can the model tell
+    # a quote that fills from one that doesn't. c_index is reported
+    # alongside it but measures fill TIMING among filled orders only.
+    for metric in ("auc", "c_index"):
+        if metric not in df.columns:
+            continue
+        s = df.groupby("arm")[metric].agg(["mean", "std", "min", "max"]).loc[order]
+        print("\n" + "=" * 66)
+        print(f"ABLATION — {metric} by arm  (n={args.seeds} seeds)")
+        print("=" * 66)
+        print(s.to_string())
+        print(f"  full - cond : {s.loc['full','mean'] - s.loc['cond','mean']:+.4f}")
+        print(f"  full - lob  : {s.loc['full','mean'] - s.loc['lob','mean']:+.4f}")
+
+    summary = df.groupby("arm")["c_index"].agg(["mean", "std", "min", "max"]).loc[order]
     print()
 
     full_m = summary.loc["full", "mean"]
@@ -109,10 +118,8 @@ def main():
     lob_m  = summary.loc["lob",  "mean"]
     spread = float(df.groupby("arm")["c_index"].std().max())
 
-    print(f"LOB feature contribution : {full_m - cond_m:+.4f}  (full - cond)")
-    print(f"Offset/side contribution : {full_m - lob_m:+.4f}  (full - lob)")
-    print(f"Largest within-arm std   :  {spread:.4f}")
-    print()
+    print("=" * 66)
+    print("VERDICT (on c_index)")
     print("=" * 66)
     if full_m - cond_m > max(0.02, 2 * spread):
         print("LOB features add signal beyond offset/latency alone.")
