@@ -1,15 +1,9 @@
-\begin{thebibliography}{21}
+\begin{thebibliography}{10}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
-
-\bibitem[Aquilina et~al.(2022)Aquilina, Budish, and O'Neill]{aquilina2022}
-Matteo Aquilina, Eric Budish, and Peter O'Neill.
-\newblock Quantifying the high-frequency trading arms race.
-\newblock \emph{Quarterly Journal of Economics}, 137\penalty0 (1):\penalty0
-  493--564, 2022.
 
 \bibitem[Arroyo et~al.(2024)Arroyo, Cartea, Moreno-Pino, and
   Zohren]{arroyo2024}
@@ -23,46 +17,10 @@ Marco Avellaneda and Sasha Stoikov.
 \newblock High-frequency trading in a limit order book.
 \newblock \emph{Quantitative Finance}, 8\penalty0 (3):\penalty0 217--224, 2008.
 
-\bibitem[Briola et~al.(2021)Briola, Turiel, Marcaccioli, and Aste]{briola2021}
-Antonio Briola, Jeremy Turiel, Riccardo Marcaccioli, and Tomaso Aste.
-\newblock Deep reinforcement learning for active high frequency trading.
-\newblock \emph{arXiv preprint}, 2021.
-\newblock arXiv:2101.07107.
-
-\bibitem[Brolley and Zoican(2023)]{brolley2023}
-Michael Brolley and Marius Zoican.
-\newblock Liquid speed: A micro-burst fee for low-latency exchanges.
-\newblock \emph{Journal of Financial Markets}, 2023.
-
-\bibitem[Budish et~al.(2015)Budish, Cramton, and Shim]{budish2015}
-Eric Budish, Peter Cramton, and John Shim.
-\newblock The high-frequency trading arms race: Frequent batch auctions as a
-  market design response.
-\newblock \emph{Quarterly Journal of Economics}, 130\penalty0 (4):\penalty0
-  1547--1621, 2015.
-
 \bibitem[Cartea and S{\'a}nchez-Betancourt(2023)]{cartea2023}
 {\'A}lvaro Cartea and Leandro S{\'a}nchez-Betancourt.
 \newblock Optimal execution with stochastic delay.
 \newblock \emph{Finance and Stochastics}, 27:\penalty0 1--47, 2023.
-
-\bibitem[Cartea et~al.(2018)Cartea, Donnelly, and Jaimungal]{cartea2018}
-{\'A}lvaro Cartea, Ryan Donnelly, and Sebastian Jaimungal.
-\newblock Enhancing trading strategies with order book signals.
-\newblock \emph{Applied Mathematical Finance}, 25\penalty0 (1):\penalty0 1--35,
-  2018.
-
-\bibitem[Chen and Moallemi(2018)]{chen2018}
-Nan Chen and Ciamac~C. Moallemi.
-\newblock Optimal market making in the presence of latency.
-\newblock \emph{arXiv preprint}, 2018.
-\newblock arXiv:1806.05849.
-
-\bibitem[Garman(1976)]{garman1976}
-Mark~B. Garman.
-\newblock Market microstructure.
-\newblock \emph{Journal of Financial Economics}, 3\penalty0 (3):\penalty0
-  257--275, 1976.
 
 \bibitem[Grinsztajn et~al.(2022)Grinsztajn, Oyallon, and
   Varoquaux]{grinsztajn2022}
@@ -71,32 +29,6 @@ L{\'e}o Grinsztajn, Edouard Oyallon, and Ga{\"e}l Varoquaux.
   tabular data?
 \newblock In \emph{Advances in Neural Information Processing Systems (Datasets
   and Benchmarks Track)}, 2022.
-
-\bibitem[Guo et~al.(2023)Guo, Lin, and Huang]{guo2023}
-Xiaofeng Guo, Yuan Lin, and Ke~Huang.
-\newblock Market making with deep reinforcement learning from limit order
-  books.
-\newblock \emph{arXiv preprint}, 2023.
-\newblock arXiv:2305.15821.
-
-\bibitem[Ho and Stoll(1981)]{ho1981}
-Thomas Ho and Hans~R. Stoll.
-\newblock Optimal dealer pricing under transactions and return uncertainty.
-\newblock \emph{Journal of Financial Economics}, 9\penalty0 (1):\penalty0
-  47--73, 1981.
-
-\bibitem[Hu(2019)]{hu2019}
-Edwin Hu.
-\newblock Intentional access delays, market quality, and price discovery:
-  Evidence from iex becoming an exchange.
-\newblock \emph{SEC DERA Working Paper}, 2019.
-
-\bibitem[Jiang et~al.(2025)Jiang, Yang, Wang, Li, Huang, and Li]{jiang2025}
-Yuchen Jiang, Hongyi Yang, Le~Wang, Zhen Li, Wei Huang, and Bo~Li.
-\newblock {RELAVER}: Resolving latency and inventory risk in market making with
-  reinforcement learning.
-\newblock \emph{arXiv preprint}, 2025.
-\newblock arXiv:2505.12465.
 
 \bibitem[Lehalle and Mounjid(2022)]{lehalle2022}
 Charles-Albert Lehalle and Othmane Mounjid.
@@ -111,6 +43,11 @@ Andrew~W. Lo, A.~Craig MacKinlay, and June Zhang.
 \newblock \emph{Journal of Financial Economics}, 65\penalty0 (1):\penalty0
   31--71, 2002.
 
+\bibitem[L{\'o}pez~de Prado(2018)]{lopezdeprado2018}
+Marcos L{\'o}pez~de Prado.
+\newblock \emph{Advances in Financial Machine Learning}.
+\newblock Wiley, 2018.
+
 \bibitem[Maglaras et~al.(2022)Maglaras, Moallemi, and Wang]{maglaras2022}
 Costis Maglaras, Ciamac~C. Moallemi, and Muye Wang.
 \newblock A deep learning approach to estimating fill probabilities in a limit
@@ -118,22 +55,15 @@ Costis Maglaras, Ciamac~C. Moallemi, and Muye Wang.
 \newblock \emph{Quantitative Finance}, 22\penalty0 (11):\penalty0 1989--2003,
   2022.
 
-\bibitem[Moallemi and Saglam(2013)]{moallemi2013}
-Ciamac~C. Moallemi and Mehmet Saglam.
-\newblock The cost of latency in high-frequency trading.
-\newblock \emph{Operations Research}, 61\penalty0 (5):\penalty0 1070--1086,
-  2013.
-
 \bibitem[Shwartz-Ziv and Armon(2022)]{shwartz2022}
 Ravid Shwartz-Ziv and Amitai Armon.
 \newblock Tabular data: Deep learning is not all you need.
 \newblock \emph{Information Fusion}, 81:\penalty0 84--90, 2022.
 
-\bibitem[Spooner et~al.(2018)Spooner, Fearnley, Savani, and
-  Koukorinis]{spooner2018}
-Thomas Spooner, John Fearnley, Rahul Savani, and Andreas Koukorinis.
-\newblock Market making via reinforcement learning.
-\newblock \emph{Proceedings of AAMAS}, 2018.
-\newblock arXiv:1804.04216.
+\bibitem[Zhang et~al.(2019)Zhang, Zohren, and Roberts]{zhang2019}
+Zihao Zhang, Stefan Zohren, and Stephen Roberts.
+\newblock {DeepLOB}: Deep convolutional neural networks for limit order books.
+\newblock \emph{IEEE Transactions on Signal Processing}, 67\penalty0
+  (11):\penalty0 3001--3012, 2019.
 
 \end{thebibliography}
