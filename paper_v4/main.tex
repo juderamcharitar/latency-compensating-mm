@@ -1,0 +1,837 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{natbib}
+\usepackage{microtype}
+\usepackage{caption}
+\usepackage{enumitem}
+
+\bibliographystyle{plainnat}
+
+\title{\textbf{Gradient Boosting Recovers Fill Probability Signal\\
+That a Deep Survival Model Misses}\\[0.4em]
+\large A false negative about data content, from 70 days of\\
+cryptocurrency limit order book data}
+
+\author{Jude Kriel Ramcharitar\\
+\small Independent Researcher\\
+\small \texttt{j.k.ramcharitar@gmail.com}}
+
+\date{August 2026 \quad$\cdot$\quad Version 3.0 --- Working Paper}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Retail and non-institutional algorithmic traders operating under execution
+delays of 200\,ms to 2\,s face substantial stale-quote risk: the book can move
+before a quote reaches the exchange. A natural response is to substitute
+prediction for speed, estimating the probability that a quote fills given
+current limit order book (LOB) state. Whether this is possible at the data
+frequency available to such traders is an empirical question, and we find that
+whether the available signal is recovered depends strongly on model class.
+
+Using 269{,}330 LOB snapshots collected continuously over 70 days from Kraken
+across BTC/USD, ETH/USD and SOL/USD, we benchmark fill probability estimators
+against a deliberately trivial reference: a 32-cell lookup table holding only
+the mean historical fill rate for each combination of quote offset, latency
+window and side. Under a snapshot-grouped temporal split, gradient-boosted trees
+over microstructure features beat this reference on all three assets, by
+$+0.174$, $+0.097$ and $+0.045$ AUC (mean $+0.105$). An LSTM survival model over
+the same features, given a 50-snapshot temporal window the trees never receive,
+beats it on none, scoring $-0.012$, $-0.007$ and $-0.116$ against the table.
+
+The positive result survives our leakage and specification checks. It holds under a split
+that prevents any snapshot appearing in both training and test data, and it
+strengthens when all price-derived columns are removed, ruling out the trees
+partitioning on price level as a proxy for time period. A boosted model
+restricted to the three conditioning variables reproduces the lookup table to
+four decimal places, confirming the comparison is set up correctly.
+
+We also report a conditioning defect that invalidated our own earlier results,
+in which quote offset never reached the model, and which we retain as a
+reproduction control. Corrected and uncorrected forms differ by 0.15 C-index,
+and the uncorrected form performs at chance across five seeds.
+
+The practical implication reverses the framing we began with. Microstructure
+signal is present at roughly 90 observed LOB updates per hour and is worth about
+0.10 AUC over quote geometry alone. Extracting it, in our experiments, did not
+require more data, finer data or a larger model; it required a model class
+suited to tabular features. Our tested deep survival architecture, adapted from
+the higher-frequency literature, did not recover it.
+
+\vspace{0.8em}
+\noindent\textbf{Keywords:} market making, market microstructure, limit order
+book, fill probability, execution latency, gradient boosting, model selection
+
+\vspace{0.3em}
+\noindent\textbf{JEL:} G12, G14, C45, C61, G23
+\end{abstract}
+
+\vspace{1em}
+
+\section{Introduction}
+
+In competitive markets, speed is capital. Firms dominating modern equity and
+cryptocurrency liquidity provision have invested heavily in compressing
+execution latency to microseconds. Microseconds do not matter to the real
+economy; being first to respond to a price signal is profitable, repeatedly, at
+scale. This raises a precise question: is speed itself the valuable resource, or
+is it a proxy for the ability to act on information before it becomes stale?
+
+If the latter, speed might not be strictly necessary. A participant who cannot
+act in microseconds could still act correctly, provided they can predict what
+the market will look like when their order arrives. Earlier versions of this
+work proposed \emph{latency-compensating market making} on that basis, in which
+models trained on LOB microstructure substitute predictive accuracy for
+execution speed.
+
+This version reports the empirical status of the predictive component. The
+signal exists. Our original model could not find it.
+
+\subsection{Two findings}
+
+\textbf{Microstructure predicts fills at retail data frequency.}
+Gradient-boosted trees over microstructure features beat a lookup table on quote
+offset, latency and side by $+0.174$, $+0.097$ and $+0.045$ AUC on BTC, SOL and
+ETH. The effect appears on every asset, survives a snapshot-grouped split, and
+strengthens when price-derived features are removed.
+
+\textbf{A deep survival model extracts none of it.} An LSTM over the same
+features, with a 50-snapshot temporal window the trees never see, scores at or
+below the lookup table on all three assets. Pooled, it matches the table to
+within 0.0003 AUC.
+
+The gap between these findings is the paper. Both models had the same features,
+the same labels and the same split. One recovered roughly 0.10 AUC of signal and
+the other recovered none.
+
+\subsection{How we arrived here}
+
+We report the sequence because the intermediate conclusions were wrong in
+instructive ways.
+
+Version~1 presented results on synthetic LOB data. Those results were
+encouraging and uninformative: a geometric Brownian motion price process with a
+hand-specified fill rule contains whatever structure the specification puts
+there.
+
+On real data our first results fell below chance. A diagnostic located a defect
+in the model's input pipeline (Section~\ref{sec:defect}). Correcting it produced
+a real improvement, and we then compared the corrected model against a lookup
+table, a comparison that should have come first. The model did not beat it. We
+concluded microstructure carried no signal at this data frequency and wrote that
+conclusion up.
+
+Running a gradient-boosted baseline, which that draft had itself flagged as
+missing, overturned the conclusion within twenty minutes. The features were
+informative throughout. The measurement instrument was not.
+
+We draw the methodological point out in Section~\ref{sec:lessons}. Inferring a
+data limitation from one model's failure is a specific and avoidable error, and
+we made it twice, for two different underlying reasons.
+
+\subsection{Contributions}
+
+\begin{enumerate}[itemsep=2pt,topsep=4pt]
+\item We show microstructure features predict our replay-defined fill outcome at
+roughly 90 observed LOB updates per hour, worth a mean $+0.105$ AUC over quote
+geometry, on three assets (Section~\ref{sec:results}).
+
+\item We show an LSTM survival model of the kind adapted from higher-frequency
+work extracts none of this signal, despite receiving strictly more information
+than the model that does (Section~\ref{sec:comparison}).
+
+\item We release 269{,}330 timestamped 10-level LOB snapshots with the full
+collection, feature and evaluation pipeline (Section~\ref{sec:data}).
+
+\item We report a leakage audit for the positive result: grouped splits, price
+removal, a shuffled-split contrast and a control fit that reproduces the
+reference (Section~\ref{sec:audit}).
+
+\item We document a conditioning defect that invalidated our own prior results
+and retain it as a reproduction control (Section~\ref{sec:defect}).
+\end{enumerate}
+
+\subsection{Scope}
+\label{sec:scope}
+
+Because the interpretive distance between what we measured and what the result
+is likely to be read as saying is large, we state the boundaries before the
+evidence.
+
+\textbf{Established.} In our Kraken sample, covering three cryptocurrency pairs
+from June to August 2026 at roughly 90 observed LOB updates per hour,
+microstructure features carry predictive content for our replay-defined fill
+outcome beyond quote offset, latency and side, recoverable by gradient-boosted
+trees.
+
+\textbf{Not established: economic exploitability.} AUC of 0.78 is not a trading
+strategy. We run no backtest, no transaction cost analysis and no live
+evaluation. The distance between a predictive edge and a profitable one is where
+most of the difficulty in this problem lies, and we do not cross it.
+
+\textbf{Not established: realised fills.} Labels are reconstructed from
+subsequent book states and do not model queue position, so the measured outcome
+is an optimistic proxy for a late-arriving limit order. We show discrimination
+for a replay-defined fill, not for a realised execution.
+
+\textbf{Not established: calibration.} AUC measures ranking. It does not
+establish that a predicted 0.70 corresponds to a 70\% fill rate. This matters
+because the abstention rule in \eqref{eq:abstain} thresholds a probability, and
+a well-ranked but poorly calibrated estimator would not support it without
+recalibration.
+
+\textbf{Not established: other deep architectures.} We tested one architecture
+at one hyperparameter setting. A fair reading is that our implementation,
+hyperparameters or survival objective are at fault rather than deep learning
+generally.
+
+\textbf{Not established: generality.} One venue, one 70-day window, three
+cryptocurrency pairs, one feed type. We make no claim about equity venues, other
+sampling frequencies or other periods.
+
+\textbf{Not tested.} The reinforcement learning agent proposed in Version~1
+consumed estimates from the defective model and was trained only on synthetic
+data. We report no RL results (Section~\ref{sec:rl-status}).
+
+\section{Related Work}
+
+\subsection{Market making and latency}
+
+The modern framework originates with \citet{garman1976} and \citet{ho1981},
+formalised as a stochastic control problem by \citet{avellaneda2008}. Extensions
+incorporate adverse selection and execution uncertainty \citep{cartea2018}, and
+\citet{cartea2023} introduce stochastic delay into optimal execution.
+
+Nearly all analytical market making models assume negligible execution latency.
+\citet{lehalle2022} show the assumption is load-bearing: the value of predictive
+signals about future order flow is systematically eroded by latency. Our results
+bear on the premise of that argument, since they establish a usable signal
+exists at retail data frequency in the first place.
+
+\subsection{The latency arms race}
+
+\citet{moallemi2013} give the first formal model of latency cost.
+\citet{budish2015} characterise continuous-time limit order books as generating
+structurally wasteful speed investment. \citet{aquilina2022} quantify this,
+finding latency arbitrage races roughly once per minute per symbol in FTSE 100
+stocks with modal durations of 5--10 microseconds, and estimating that
+eliminating them would cut effective spreads by about 17\%.
+
+Proposed remedies (the IEX speed bump of \citealp{hu2019}, frequent batch
+auctions in \citealp{budish2015}, micro-burst fees in \citealp{brolley2023})
+operate at the exchange level and require regulatory or venue adoption. None
+offers recourse to an individual trader on existing infrastructure.
+
+\subsection{Fill probability estimation}
+
+\citet{lo2002} established econometric foundations for execution probability
+modelling. \citet{maglaras2022} introduced a deep learning approach treating
+execution as a time-to-fill distribution. \citet{arroyo2024} advanced this with
+a convolutional-transformer using survival analysis, handling the
+right-censoring inherent in limit order data.
+
+That work uses tick-level message data. Our LSTM follows its survival
+formulation and fails on snapshot data at a median 18.2-second interval. We do
+not read this as contradicting those results. The likelier reading is that
+architectures designed for dense sequential data lose their advantage when the
+sequence is sparse and irregular, which is a boundary condition worth stating.
+
+\subsection{Tabular deep learning}
+
+Our central comparison connects to a finding from outside finance. Systematic
+evaluations report that gradient-boosted trees remain competitive with or
+superior to neural networks on tabular data, particularly at moderate sample
+sizes with heterogeneous, weakly correlated features
+\citep{grinsztajn2022,shwartz2022}. Our features are engineered scalars
+(spreads, imbalances, volumes) computed per snapshot, which is tabular in
+structure even though the underlying process is sequential. Our result is
+consistent with that literature and, so far as we are aware, has not previously
+been demonstrated for LOB fill prediction.
+
+\subsection{Reinforcement learning for market making}
+
+\citet{spooner2018} demonstrated RL agents learning market making policies in
+simulation; \citet{guo2023} added continuous action spaces; \citet{briola2021}
+established viability in cryptocurrency settings. RELAVER \citep{jiang2025}
+models random execution delays of 30--100\,ms. We do not extend this line in the
+present version (Section~\ref{sec:rl-status}).
+
+\section{Problem Formalisation}
+\label{sec:formal}
+
+\subsection{Standard setup}
+
+A market maker operates over horizon $[0,T]$. The mid-price follows
+$S_t = S_0 + \sigma W_t$ with $\sigma > 0$ and $W_t$ standard Brownian motion.
+Posting a bid at distance $\delta^b$ and ask at $\delta^a$ from mid, fills arrive
+as Poisson processes with intensities
+\begin{equation}
+\lambda^b(\delta^b) = A e^{-k\delta^b}, \qquad
+\lambda^a(\delta^a) = A e^{-k\delta^a},
+\end{equation}
+where $A, k > 0$ govern decay of arrival rate with distance from mid. The
+objective is
+\begin{equation}
+\max_{\delta^b,\delta^a} \; \mathbb{E}\!\left[ X_T + q_T S_T - \gamma q_T^2 \right],
+\end{equation}
+with $\gamma > 0$ the inventory risk aversion parameter.
+
+\subsection{Execution latency}
+
+We introduce execution latency $\ell$, the delay between quoting decision and
+order arrival, and consider $\ell \in [200\,\text{ms}, 2000\,\text{ms}]$. A quote
+posted at $t$ arrives at $t + \ell$ into a book state $\mathcal{F}_{t+\ell}$
+unobserved at decision time, so the relevant fill probability is
+\begin{equation}
+P^{\text{fill}}(\delta, \ell, \mathcal{F}_t)
+= \mathbb{P}\!\left[\text{order fills} \mid \delta, \mathcal{F}_{t+\ell}\right],
+\end{equation}
+which depends on a future state. This produces \emph{adverse selection
+amplification}, where quotes are picked off as the mid moves during
+transmission, and \emph{cancellation impotence}, where an adverse signal cannot
+be acted on before a fill occurs.
+
+\subsection{The latency-compensating problem}
+
+Let $\widehat{P}^{\text{fill}}$ estimate fill probability and
+$\widehat{S}_{t+\ell}$ the mid-price at arrival. The problem is
+\begin{equation}
+\max_{\delta^b,\delta^a} \;
+\mathbb{E}\!\left[ X_T + q_T \widehat{S}_T - \gamma q_T^2
+\;\middle|\; \widehat{\mathcal{F}}_{t+\ell} \right]
+\end{equation}
+subject to participation constraints
+\begin{equation}
+\widehat{P}^{\text{fill}}(\delta, \ell, \mathcal{F}_t) \geq \tau_{\text{fill}},
+\qquad
+\left| \widehat{S}_{t+\ell} - S_t \right| \leq \Delta_{\text{safe}},
+\label{eq:abstain}
+\end{equation}
+with abstention whenever either is violated.
+
+\subsection{Viability conditions}
+
+Version~1 stated three conditions: sufficient predictive accuracy, adequate
+uninformed order flow \citep{chen2018}, and strict abstention discipline. This
+paper concerns the first. Our result is that a usable estimator
+$\widehat{P}^{\text{fill}}$ is obtainable at retail data frequency, which
+establishes the condition is satisfiable. Whether the accuracy suffices for
+profitability, and whether the other two conditions hold, is untested here.
+
+\section{Data}
+\label{sec:data}
+
+\subsection{Collection}
+
+LOB data were collected from Kraken via WebSocket API v2, subscribing to the
+\texttt{book} channel at depth 10 for BTC/USD, ETH/USD and SOL/USD. Updates are
+timestamped at receipt and stored with the full 10-level ladder in Parquet,
+partitioned by asset, date and hour.
+
+Collection ran from 15 June to 24 August 2026. The collector is managed by a
+systemd unit with \texttt{Restart=always}; over the final three weeks it
+restarted automatically three times after WebSocket disconnections. An earlier
+configuration using a detached terminal session and a bounded reconnect loop
+failed silently on 20 July and stayed down for fourteen days, costing an
+estimated 90{,}000 snapshots. We note this because unattended collection
+reliability is a material and under-discussed constraint on independent
+microstructure research.
+
+\subsection{Sampling characteristics}
+
+Kraken's book channel is event-driven, so sampling is sparse and irregular.
+
+\begin{table}[ht]
+\centering
+\caption{Inter-update intervals, BTC/USD.}
+\label{tab:gaps}
+\begin{tabular}{lr}
+\toprule
+Statistic & Value \\
+\midrule
+Mean gap            & 40.1\,s \\
+Median gap          & 18.2\,s \\
+Minimum gap         & $<$0.01\,s \\
+Maximum gap         & 6339\,s \\
+Updates per hour    & $\approx$90 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+The maximum gap corresponds to the collector outage rather than market
+quiescence. This sampling rate is three to four orders of magnitude coarser than
+the tick data used in \citet{arroyo2024} and \citet{maglaras2022}, which is the
+context in which our LSTM result should be read.
+
+\begin{table}[ht]
+\centering
+\caption{Collected dataset, 15 June -- 24 August 2026.}
+\label{tab:data}
+\begin{tabular}{lrrr}
+\toprule
+Asset & Snapshots & Label rows & Overall fill rate \\
+\midrule
+BTC/USD & 111{,}002 & 3{,}551{,}392 & 0.734 \\
+ETH/USD &  34{,}380 & 1{,}099{,}488 & 0.754 \\
+SOL/USD & 123{,}948 & 3{,}965{,}664 & 0.534 \\
+\midrule
+Total   & 269{,}330 & 8{,}616{,}544 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Label construction}
+
+For each snapshot we simulate limit order submissions at offsets
+$\delta \in \{1,2,3,5\}$ ticks on each side, recording whether each would have
+filled within each latency window $\ell \in \{200,500,1000,2000\}$\,ms based on
+subsequent book evolution. This yields $4 \times 4 \times 2 = 32$ label rows per
+snapshot, with unfilled orders right-censored at $\ell$.
+
+Both conditioning variables show strong monotone structure
+(Table~\ref{tab:marginals}), which is what makes the lookup table a demanding
+reference rather than a straw one.
+
+\begin{table}[ht]
+\centering
+\caption{Marginal fill rates by quote offset and latency window, SOL/USD.}
+\label{tab:marginals}
+\begin{tabular}{lr@{\hskip 2.5em}lr}
+\toprule
+Offset (ticks) & Fill rate & Latency (ms) & Fill rate \\
+\midrule
+1 & 0.782 & 200  & 0.385 \\
+2 & 0.550 & 500  & 0.498 \\
+3 & 0.446 & 1000 & 0.585 \\
+5 & 0.358 & 2000 & 0.669 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Features}
+
+From each snapshot we construct 109 features: 40 raw price and volume levels,
+normalised prices and volumes, mid-price, spread, spread in basis points, order
+book imbalance, depth imbalance, and rolling statistics and lagged differences.
+Prices are normalised by contemporaneous mid, volumes by a rolling mean.
+
+We define a \emph{microstructure} subset of 63 features by removing every
+price-derived column, raw and normalised, retaining spreads, imbalances, order
+book imbalance, depth, volumes and volatility measures. This subset is used for
+the headline results; the rationale is in Section~\ref{sec:price}.
+
+Two pipeline parameters required adjustment for sparse data. The rolling
+normalisation window was reduced from 1000 to 10 snapshots and lag features from
+$\{1,5,10,20,50\}$ to $\{1,2,3,5\}$. At the original settings a 1000-snapshot
+window spans roughly eleven hours of wall-clock time, which is not a meaningful
+local normalisation.
+
+\section{Models and Evaluation}
+\label{sec:models}
+
+\subsection{The reference}
+
+Our benchmark is a lookup table: the mean fill rate for each
+$(\delta, \ell, \text{side})$ cell, 32 cells, estimated on training data and
+applied unchanged to test data. It has no learned parameters, no access to the
+order book and no temporal information.
+
+It is a demanding reference. Quote offset spans a 0.42 range in fill rate and
+latency 0.28 (Table~\ref{tab:marginals}). Any model failing to beat it adds
+nothing over two variables the trader selects directly and already knows.
+
+\subsection{Gradient-boosted trees}
+
+We fit gradient-boosted trees (XGBoost, 400 estimators, depth 6, learning rate
+0.05, subsample 0.8) on the microstructure subset for the current snapshot only,
+plus the three conditioning variables. The model receives \textbf{no temporal
+window}.
+
+\subsection{LSTM survival model}
+
+The LSTM encodes a lookback of $L = 50$ snapshots with two layers (hidden
+dimension 64, dropout 0.2). A conditioning vector
+$c = [\ell/\ell_{\max},\, \delta/\delta_{\max},\, \text{side}] \in \mathbb{R}^3$
+passes through an MLP and is concatenated before a monotone survival decoder.
+Total parameters: 90{,}754. Training minimises the negative log-likelihood under
+right-censoring,
+\begin{equation}
+\mathcal{L} = -\frac{1}{N}\sum_{i=1}^{N}
+\left[ \Delta_i \log h(\widetilde{T}_i) + \log S(\widetilde{T}_i) \right],
+\end{equation}
+using Adam at $\eta = 10^{-3}$ with early stopping.
+
+The comparison is deliberately unfavourable to the trees. The LSTM sees fifty
+snapshots of history and 46 additional price columns; the trees see one snapshot
+and fewer features.
+
+\subsection{Splitting}
+\label{sec:split}
+
+All results use a \emph{snapshot-grouped} temporal split at 70/15/15. Because
+each snapshot generates 32 label rows sharing identical features, a row-wise
+split lets a snapshot appear in both training and test data, allowing a
+sufficiently flexible model to memorise it. Grouping on snapshot removes this.
+The effect is measured in Section~\ref{sec:audit}.
+
+\subsection{Metric}
+
+We report fill AUC: area under the ROC curve for the binary filled/not-filled
+task, computed exactly via the Mann-Whitney rank-sum identity with ties credited
+0.5. AUC is the relevant quantity because the abstention rule in
+\eqref{eq:abstain} tests $\widehat{P}^{\text{fill}} \geq \tau_{\text{fill}}$, a
+binary decision that never compares timings.
+
+\section{A Conditioning Defect and Its Use as a Control}
+\label{sec:defect}
+
+Our first real-data results were substantially worse than chance. Our initial
+hypothesis was insufficient data. That hypothesis was wrong, and the diagnostic
+that displaced it is worth describing.
+
+\subsection{The defect}
+
+The conditioning vector $c$ originally contained only $\ell$. Quote offset
+$\delta$ and side were used to construct labels but never reached the model.
+
+For a fixed snapshot and latency, the eight label rows spanning four offsets and
+two sides therefore present \emph{identical} model input while carrying
+different targets, with marginal fill rates from 0.782 at 1 tick to 0.358 at 5
+ticks. No function of the input can separate them, and the loss-minimising
+response is to predict the conditional mean and ignore the input. Validation
+loss moved roughly 0.003 over 40 epochs in every run.
+
+This also explains an observation that misled us. Across collection milestones,
+measured C-index moved 0.5008, 0.5308, 0.5526 as the dataset grew from 21K to
+51K to 103K snapshots. We read this as convergence. All three lie within seed
+variance of chance, and a later run on 269K snapshots returned 0.4749, worse
+with more data. That is the expected behaviour when additional data supplies
+additional mutually contradictory input-target pairs.
+
+\subsection{Correction and control}
+
+Adding $\delta$ and side to $c$ raised C-index from 0.4749 to 0.6266 on an
+otherwise identical configuration, with validation loss movement increasing
+roughly eightfold.
+
+We retain the defective configuration as an arm, \textsc{lob}, in which the LOB
+window is supplied but $\delta$ and side are reset to constants. It is a
+reproduction control: any claim that a result derives from LOB features should
+come with a demonstration that the corresponding defective configuration
+performs at chance. Across five seeds it scores $0.5034 \pm 0.031$
+(Table~\ref{tab:ablation}).
+
+\subsection{Consequence for prior results}
+
+All real-data figures in Versions 1.0--2.0 were produced by the defective
+configuration and should be disregarded, including the C-index progression above
+and a projection that 300{,}000 snapshots would be needed for convergence, which
+was extrapolated from noise.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Main comparison}
+\label{sec:comparison}
+
+Table~\ref{tab:main} reports all three predictors on identical test rows under
+the grouped split.
+
+\begin{table}[ht]
+\centering
+\caption{Fill AUC by model class, grouped temporal split, identical test rows.
+GBM uses the 63-feature microstructure subset and the current snapshot only; the
+LSTM uses all 109 features and a 50-snapshot window.}
+\label{tab:main}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Asset & Test rows & Lookup & GBM & LSTM & GBM $-$ Lookup & LSTM $-$ Lookup \\
+\midrule
+BTC/USD & 29{,}788 & 0.6390 & 0.8128 & 0.6271 & $+0.1738$ & $-0.0119$ \\
+SOL/USD & 29{,}845 & 0.6819 & 0.7786 & 0.6750 & $+0.0967$ & $-0.0069$ \\
+ETH/USD & 29{,}798 & 0.6505 & 0.6956 & 0.5341 & $+0.0450$ & $-0.1164$ \\
+\midrule
+Mean    &          &        &        &        & $+0.1052$ & $-0.0451$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+Three observations.
+
+The GBM beats the lookup table on every asset, by $+0.174$, $+0.097$ and
+$+0.045$. Microstructure features carry predictive content for the replay-defined
+fill outcome at this sampling rate.
+
+The LSTM beats it on none, and on ETH/USD underperforms by 0.116. Pooled across
+assets it matched the table to $+0.0003$ AUC.
+
+The effect size varies fourfold across assets and does not track book thickness
+in any obvious way. SOL/USD has the thinnest book and the steepest offset
+gradient but a middling gap; ETH/USD has both the fewest snapshots and the
+smallest gap, which may reflect its 34{,}380 snapshots rather than any property
+of the asset. We report the range rather than leading with the mean.
+
+\subsection{The LSTM failure}
+
+The LSTM receives strictly more information than the GBM: the same
+microstructure features, plus a 50-snapshot window, plus 46 additional
+price-derived columns. It performs worse on all three assets.
+
+Its training behaviour is consistent with underfitting rather than overfitting.
+On ETH it stopped at epoch 13 with validation loss moving 1.7405 to 1.7329; on
+SOL at epoch 12; on BTC at epoch 32 with the largest movement, 1.6592 to 1.6183,
+and the best relative result. Longer patience, a larger hidden dimension or a
+different learning rate schedule might change this, and we did not run that
+search.
+
+What we can claim is narrower than ``deep learning fails here.'' A specific
+architecture, adapted from work on tick-level data and trained with our
+hyperparameters, does not recover signal that a standard tabular method recovers
+easily from less information.
+
+\subsection{Ablation}
+\label{sec:ablation}
+
+For completeness we report the ablation run on the LSTM before the GBM
+comparison existed, using C-index on a pooled row-wise split.
+
+\begin{table}[ht]
+\centering
+\caption{LSTM ablation, C-index, five seeds per arm, pooled row-wise split.}
+\label{tab:ablation}
+\begin{tabular}{lrrrr}
+\toprule
+Arm & Mean & SD & Min & Max \\
+\midrule
+\textsc{full} (LOB $+$ conditioning) & 0.6101 & 0.034 & 0.5670 & 0.6536 \\
+\textsc{cond} (conditioning only)    & 0.5247 & 0.041 & 0.4853 & 0.5885 \\
+\textsc{lob}  (defective control)    & 0.5034 & 0.031 & 0.4678 & 0.5427 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+\textsc{full} exceeds \textsc{cond} by 0.085, which taken alone appears to show
+the LSTM using LOB features productively. It does not. \textsc{cond} is a model
+trained with its dominant input stream zeroed, a damaged network rather than a
+fair alternative predictor, and Table~\ref{tab:main} shows the LSTM adds nothing
+over quote geometry. We report this because the ablation was run first and,
+alone, supported a conclusion the external reference reversed.
+
+\textsc{lob} at 0.5034 confirms the defect of Section~\ref{sec:defect}
+reproduces to chance.
+
+\subsection{Status of the reinforcement learning component}
+\label{sec:rl-status}
+
+Version~1 proposed a latency-aware PPO agent consuming fill probability
+estimates, with a reward penalising adverse fills attributable to execution
+delay. We report no RL results. The agent was trained only on synthetic data,
+where it did not converge, and it consumed estimates from the defective model,
+which makes those runs uninterpretable.
+
+Given the results above, an RL agent is now worth revisiting with GBM-derived
+fill estimates. We regard this as the most promising immediate extension and it
+is not attempted here.
+
+\section{Audit of the Positive Result}
+\label{sec:audit}
+
+A positive result obtained after several negative ones deserves scrutiny. We
+report the checks we ran, including those that failed to find a problem.
+
+\subsection{Splitting}
+
+Our initial GBM result used a row-wise temporal split and scored 0.8264 on
+BTC/USD. Because 32 label rows share each snapshot's features, this permits a
+snapshot to straddle train and test. Regrouping on snapshot reduced the score to
+0.8127, a loss of 0.014. The effect is real but small, and all results in
+Section~\ref{sec:results} use the grouped split.
+
+\subsection{Shuffled-split contrast}
+
+A shuffled split, invalid for time series, scored 0.8258 against 0.8264 for the
+temporal row split. The near-identity suggests the signal is local and
+stationary rather than trend-dependent. We note this as an observation rather
+than a check that was passed, since we do not have a clean interpretation of it.
+
+\subsection{Price-level features}
+\label{sec:price}
+
+Feature importances on BTC initially concerned us. The largest contributors were
+\texttt{bid\_price\_2} (0.143) and \texttt{ask\_price\_2} (0.119), raw prices in
+the tens of thousands of dollars. A tree splitting on absolute price level in
+temporally-ordered data is partitioning on time period, which proxies for
+regime, and that is not microstructure prediction.
+
+Removing every price-derived column, raw and normalised, tests this directly.
+
+\begin{table}[ht]
+\centering
+\caption{Fill AUC gain over the lookup table by feature set, grouped split.}
+\label{tab:price}
+\begin{tabular}{lrrrr}
+\toprule
+Feature set & LOB features & BTC & SOL & ETH \\
+\midrule
+All                 & 109 & $+0.1658$ & $+0.0926$ & $+0.0233$ \\
+No price columns    &  68 & $+0.1724$ & $+0.0982$ & $+0.0461$ \\
+Microstructure only &  63 & $+0.1738$ & $+0.0967$ & $+0.0450$ \\
+Conditioning only   &   0 & $-0.0007$ & $+0.0000$ & $-0.0007$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+Removing price columns \emph{improved} every asset, by $+0.008$ on BTC,
+$+0.022$ on ETH and $+0.006$ on SOL. Our hypothesis was wrong: the price columns
+were nuisance variables consuming splits, not a leakage channel. Headline
+figures use the 63-feature microstructure subset accordingly.
+
+\subsection{Validating the comparison}
+
+The conditioning-only row of Table~\ref{tab:price} fits a GBM on the three
+conditioning variables alone. It reproduces the lookup table to within 0.0007 on
+every asset. That is the expected behaviour, and it confirms the comparison
+measures what we intend.
+
+\subsection{What remains unchecked}
+
+We have not tested other venues, other feed types or other tree
+hyperparameters. We have not run repeated seeds for the GBM, so per-asset
+figures carry unmeasured variance, though the between-asset spread ($+0.045$ to
+$+0.174$) is larger than seed variance plausibly accounts for. We have not
+established that the signal is economically exploitable.
+
+\section{Methodological Lessons}
+\label{sec:lessons}
+
+Three errors in this project were caught only by checks that could have been run
+at the outset, at a combined cost of about two months. Each is cheap to avoid.
+
+\textbf{Run the trivial reference first.} The lookup table took minutes to
+implement and reversed our conclusion twice: first by showing the corrected LSTM
+added nothing, then by providing the scale against which the GBM's gain was
+measurable. Without it we would have published the LSTM's 0.6266 C-index as a
+modest positive result.
+
+\textbf{An ablation is not a substitute for an external baseline.} Our LSTM ablation
+showed a clean $+0.085$ separation between \textsc{full} and \textsc{cond} and
+would, presented alone, have supported the claim that the model used LOB
+features productively. Both arms were below the lookup table. Ablations measure
+internal dependence, not external validity.
+
+\textbf{Do not infer a data limitation from one model's failure.} We reached
+that inference twice, for different reasons, and it is worth separating them.
+
+The first time, a conditioning defect was feeding the model contradictory
+input-target pairs (Section~\ref{sec:defect}). Its flat C-index looked like a
+sample-size problem, and we projected that 300{,}000 snapshots would be needed
+for convergence. We then collected for six weeks, adding roughly 130{,}000
+snapshots, and the projection was extrapolated from noise the whole time. More
+data cannot repair a defective input pipeline.
+
+The second time, with the defect corrected, the model matched a lookup table and
+we concluded the data contained no usable signal. A different model class
+overturned that in twenty minutes.
+
+Neither episode licenses the opposite rule of blaming the model first. Failures
+are sometimes genuinely about data, labels, optimisation or implementation. The
+transferable version is narrower: before concluding that data contain no usable
+signal, rule out implementation defects and test at least one model with a
+different inductive bias.
+
+\section{Limitations}
+
+\textbf{No economic evaluation.} AUC is not profit. We run no backtest, model no
+transaction costs, and make no claim that the signal survives the bid-ask
+spread, maker fees, queue position or adverse selection. This is the largest gap
+between our result and its motivating application.
+
+\textbf{Simulated fills.} Labels come from replaying subsequent book states, not
+executed orders. Queue position is not modelled, so we assume a quote at a price
+level fills when that level trades through, which is optimistic for a latecomer.
+
+\textbf{One venue.} Kraken's depth-10 book channel only.
+
+\textbf{One deep architecture.} We tested an LSTM survival model with one
+hyperparameter configuration. The convolutional-transformer of
+\citet{arroyo2024}, which Version~1 proposed, was not re-evaluated after the
+conditioning fix.
+
+\textbf{No GBM seed variance.} Per-asset GBM figures come from single fits.
+
+\textbf{ETH sample size.} ETH/USD has 34{,}380 snapshots against 111{,}002 and
+123{,}948 for the others, and shows both the weakest GBM gain and the worst LSTM
+failure. Its results should be read as confounded with sample size.
+
+\section{Conclusion}
+
+We asked whether limit order book microstructure predicts fill probability at
+the data frequency available to a retail participant, roughly 90 updates per
+hour from a public exchange feed. For our replay-defined fill outcome, it does.
+Gradient-boosted trees over
+microstructure features beat a lookup table on quote offset, latency and side by
+$+0.174$, $+0.097$ and $+0.045$ AUC across three cryptocurrency pairs, under a
+snapshot-grouped temporal split, with price-derived features removed, and with a
+conditioning-only control that reproduces the reference exactly.
+
+An LSTM survival model over the same features, given a fifty-snapshot temporal
+window the trees never receive, recovers none of it. It matches the trivial
+reference pooled and underperforms it on all three assets individually.
+
+We set out to test whether prediction can substitute for speed. We can now say
+the predictive component is available at retail data frequency, which was
+genuinely in doubt, and that in our experiments recovering it turned on model
+selection rather than on collecting more data. Whether the resulting edge
+survives transaction costs, queue position and adverse selection is the next
+question and the harder one.
+
+Our own route to this result ran through the opposite conclusion, written up in
+full. The correction came from a twenty-minute reference we had deferred for two
+months. We report that sequence because the cost of the error was six weeks of
+data collection aimed at a problem that did not exist.
+
+\section*{Data and Code Availability}
+\addcontentsline{toc}{section}{Data and Code Availability}
+
+The complete collection pipeline, feature engineering, models and every
+diagnostic reported here are available at
+\url{https://github.com/azure-cyber/latency-compensating-mm}. The scripts
+underlying Sections~\ref{sec:results} and \ref{sec:audit}
+(\texttt{gbm\_matched.py}, \texttt{gbm\_price\_test.py},
+\texttt{gbm\_leakage\_check.py}, \texttt{ablation.py}, \texttt{diagnose.py}) are
+included so both the positive and negative results can be checked directly.
+
+\section*{Disclosure of AI Assistance}
+\addcontentsline{toc}{section}{Disclosure of AI Assistance}
+
+The author used Claude (Anthropic) extensively throughout this project: for
+implementation of the data collection pipeline, feature engineering, models and
+evaluation code; for diagnostic analysis including identification of the
+conditioning defect in Section~\ref{sec:defect} and design of the audit in
+Section~\ref{sec:audit}; and for drafting and revision of this manuscript. The
+author designed the study, directed the analysis, made all substantive research
+decisions, verified the results, and is solely responsible for the content and
+any errors.
+
+\section*{Acknowledgements}
+\addcontentsline{toc}{section}{Acknowledgements}
+
+This work was conducted independently, without institutional affiliation,
+funding or supervision. The author declares no conflicts of interest and holds
+no positions in any asset discussed.
+
+\bibliography{refs}
+
+\end{document}

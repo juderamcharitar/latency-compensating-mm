@@ -1,0 +1,4 @@
+asset,test_rows,embargo_dropped,lookup,gbt_micro,gbt_all,lstm_all,lstm_micro,gbt_micro_gap,lstm_all_gap,lstm_micro_gap
+BTCUSD,49187,43,0.6965,0.7604,0.7647,0.5,0.5,0.064,-0.1965,-0.1965
+ETHUSD,34646,26,0.6684,0.6872,0.6719,0.5,0.5,0.0188,-0.1684,-0.1684
+SOLUSD,31139,58,0.6715,0.6049,0.6992,0.5,0.5,-0.0666,-0.1715,-0.1715
