@@ -34,12 +34,13 @@ choices is an empirical question, and one rarely posed against a baseline
 simple enough to make the answer interpretable.
 
 We pose it directly. Using 269{,}330 LOB snapshots collected over a 70.5-day
-calendar window from Kraken across BTC/USD, ETH/USD and SOL/USD, we predict whether a
-limit order posted at a given distance from mid trades through within a fixed
-horizon, and we benchmark against a 16-cell lookup table containing only the
-mean historical fill rate for each combination of quote offset, horizon and
-side. That table is a demanding reference: quote offset spans a 0.46 range in
-fill rate and horizon a further 0.18.
+calendar window from Kraken across BTC/USD, ETH/USD and SOL/USD, we predict whether the opposite best quote
+reaches or crosses a limit price posted at a given distance from mid, within a
+fixed horizon, and we benchmark against a 16-cell lookup table containing only the
+mean historical crossing rate for each combination of quote offset, horizon and
+side. That table is a demanding reference: both conditioning variables carry large
+monotone effects on the crossing rate, spanning 0.46 across offsets on BTC/USD at
+300\,s and comparable ranges elsewhere (Table~\ref{tab:marginals}).
 
 Microstructure features beat it, modestly and consistently. Under a
 snapshot-grouped temporal split with a 990-second embargo, gradient-boosted
@@ -59,18 +60,20 @@ both schemes throughout, since neither substitutes for the other: the temporal
 split respects forecasting order, and the blocked split reduces temporal
 distribution shift between partitions.
 
-We also compare model classes. Gradient-boosted trees outperform an LSTM on
-BTC by $+0.040$ and on ETH by $+0.021$, but the two are within $0.001$ on SOL.
-An earlier version of this work claimed model class was decisive; with a
-correctly specified binary classification head, that claim does not hold.
+We also compare model classes, holding the input representation fixed.
+Gradient-boosted trees lead an LSTM on BTC and ETH under both representations,
+but on SOL/USD the ordering flips with representation: trees lead by $0.0013$ on
+109 features and trail by $0.0475$ on the 63-feature microstructure subset. We
+draw no general ordering. An earlier version claimed model class was decisive;
+that rested on a defective survival head.
 
 Finally, we document five defects in our own pipeline, each of which produced
 plausible, publishable-looking numbers, and the specific checks that caught
 them. We consider this the most transferable part of the work.
 
 \vspace{0.8em}
-\noindent\textbf{Keywords:} limit order book, fill probability, market
-microstructure, gradient boosting, baselines, reproducibility
+\noindent\textbf{Keywords:} limit order book, fill probability, crossing
+proxy, market microstructure, gradient boosting, baselines, reproducibility
 
 \vspace{0.3em}
 \noindent\textbf{JEL:} G12, G14, C45, C61
@@ -80,14 +83,14 @@ microstructure, gradient boosting, baselines, reproducibility
 
 \section{Introduction}
 
-Consider a trader posting a limit buy order. Two quantities are entirely under
-their control and known before any model is consulted: the distance below mid
-at which they quote, and how long they will leave the order resting. Both bear
-strongly on whether the order fills. Quoting closer to mid fills more often;
-waiting longer fills more often.
+Consider a trader posting a limit order. Three quantities are entirely under
+their control and known before any model is consulted: which side they quote,
+the distance from mid at which they quote, and how long they will leave the
+order resting. All three bear on whether the order is reached. Quoting closer
+to mid is reached more often; waiting longer is reached more often.
 
-The question this paper asks is what remains. Given those two choices, does the
-state of the order book --- spreads, imbalances, depth, recent volatility ---
+The question this paper asks is what remains. Given those three choices, does
+the state of the order book --- spreads, imbalances, depth, recent volatility ---
 carry additional information about whether the order will fill?
 
 The question is worth posing carefully because the obvious answer, that of
@@ -108,8 +111,8 @@ lookup reference on BTC/USD, ETH/USD and SOL/USD, mean $+0.0415$. Seed standard
 deviations are $0.0006$ or below, so the ordering is stable across the three
 model seeds.
 
-The finding is robust to split scheme on two of three assets and reverses
-favourably on the third. We report the mechanism in
+The finding is robust to split scheme on two of three assets and changes sign
+on the third. We examine this split sensitivity in
 Section~\ref{sec:regime}.
 
 \subsection{What we no longer claim}
@@ -119,8 +122,10 @@ recovered signal a deep survival model could not. That claim rested on a
 survival decoder being fed binary targets with a constant observed time, which
 pinned its training loss at 16.1181 and returned AUC of exactly 0.5000 on every
 arm. With a binary classification head the LSTM trains normally, and the
-separation between model classes is $+0.040$ on BTC, $+0.021$ on ETH and
-$+0.001$ on SOL. Trees are better here, but not categorically.
+ordering becomes representation-dependent. Holding inputs fixed, trees lead on
+BTC and ETH under both representations; on SOL they lead by $0.0013$ with all
+109 features but trail by $0.0475$ on the 63-feature microstructure subset. We
+therefore draw no general model-class ordering.
 
 Versions 1 and 2 framed the work around execution latency, proposing that
 prediction could substitute for speed for traders operating at 200\,ms--2\,s
@@ -137,12 +142,12 @@ seconds, which is a different problem and is the one this paper addresses.
 geometry, against an explicit trivial reference, on three assets under two
 split schemes (Sections~\ref{sec:results}, \ref{sec:regime}).
 
-\item Evidence that a temporal split on trending data can invert the sign of a
-microstructure result, together with the diagnostic that detects it
-(Section~\ref{sec:regime}).
+\item Evidence that the sign of a microstructure result can depend on split
+scheme under substantial temporal distribution shift, together with the
+diagnostic that detects it (Section~\ref{sec:regime}).
 
-\item A released dataset of 269{,}330 timestamped 10-level LOB snapshots with
-the full collection, labelling and evaluation pipeline
+\item A dataset of 269{,}330 timestamped 10-level LOB snapshots, with the full
+collection, labelling and evaluation pipeline released publicly
 (Section~\ref{sec:data}).
 
 \item A catalogue of five pipeline defects that produced plausible results,
@@ -152,23 +157,32 @@ and the checks that caught each (Section~\ref{sec:defects}).
 \subsection{Scope}
 \label{sec:scope}
 
-\textbf{Established.} In our Kraken sample, three cryptocurrency pairs from June
-to August 2026, microstructure features carry predictive content for our
-replay-defined fill outcome beyond quote offset, horizon and side, recoverable
-by gradient-boosted trees, at a magnitude of $+0.027$ to $+0.049$ AUC under a
-blocked split.
+\textbf{Observed under the forecasting-ordered split.} In our Kraken sample,
+three cryptocurrency pairs from June to August 2026, microstructure features
+carry predictive content for our replay-defined crossing outcome beyond side,
+quote offset and horizon on BTC/USD and ETH/USD, at $+0.048$ and $+0.060$ AUC,
+recoverable by gradient-boosted trees. SOL/USD is negative under this split.
+
+\textbf{Observed under the blocked-split diagnostic.} The same gain appears on
+all three assets, at $+0.027$ to $+0.049$ AUC. That split was introduced after
+inspecting the temporal results (Section~\ref{sec:regime}) and is exploratory
+rather than confirmatory.
 
 \textbf{Not established: economic exploitability.} AUC is not profit. We run no
 backtest, model no transaction costs, and make no claim that this edge survives
 the spread, maker fees, queue position or adverse selection.
 
 \textbf{Not established: realised fills.} Labels are reconstructed from
-subsequent book states and do not model queue position. A quote is recorded as
-filled when top-of-book trades through its level, which is optimistic for an
-order arriving late in the queue.
+subsequent book snapshots and use no trade or execution data. A quote is
+recorded as crossed when the opposite best quote reaches or crosses its price,
+which is a proxy in two directions. It is optimistic for an order arriving late
+in the queue, since a crossing does not establish that the resting order
+executed. It is also potentially a false negative: with median gaps of 11.5 to
+48.0 seconds, a crossing that occurs and reverses entirely between two observed
+snapshots is not recorded.
 
 \textbf{Not established: calibration.} AUC measures ranking, not whether a
-predicted 0.70 corresponds to a 70\% fill rate.
+predicted 0.70 corresponds to a 70\% crossing rate.
 
 \textbf{Not established: forecasting performance.} Our blocked-split results
 train on data from after the test period. They measure whether information is
@@ -210,8 +224,9 @@ Systematic evaluations report gradient-boosted trees remaining competitive with
 neural networks on tabular data, particularly at moderate sample sizes with
 heterogeneous features \citep{grinsztajn2022,shwartz2022}. Our features are
 engineered per-snapshot scalars, which is tabular in structure. Our result is
-directionally consistent with that literature, though weaker than we previously
-claimed: trees win on two assets and tie on the third.
+directionally consistent with that literature but weaker than we previously
+claimed: trees lead on BTC and ETH under both representations, while the
+ordering on SOL depends on the representation.
 
 \subsection{Market making theory}
 
@@ -240,11 +255,14 @@ failed silently on 20 July and stayed down for fourteen days.
 \begin{table}[ht]
 \centering
 \caption{Collected data. Gaps are between consecutive book updates; the feed
-is event-driven, so sampling is irregular.}
+is event-driven, so sampling is irregular. Mean gaps include the 14-day
+collector outage described above and therefore approximate calendar span
+divided by snapshot count; the median is the better measure of normal feed
+cadence.}
 \label{tab:data}
 \begin{tabular}{lrrrrr}
 \toprule
-Asset & Snapshots & Tick & Median gap & Mean gap & Label rows \\
+Asset & Snapshots & Tick & Median gap & Mean gap$^{*}$ & Label rows \\
 \midrule
 BTC/USD & 111{,}002 & 0.10 & 11.5\,s & 54.9\,s & 1{,}760{,}728 \\
 ETH/USD &  34{,}380 & 0.01 & 48.0\,s & 177.2\,s &  515{,}576 \\
@@ -253,6 +271,9 @@ SOL/USD & 123{,}948 & 0.01 & 26.2\,s & 49.1\,s & 1{,}971{,}128 \\
 Total   & 269{,}330 &      &         &         & 4{,}247{,}432 \\
 \bottomrule
 \end{tabular}
+
+\vspace{0.4em}
+{\footnotesize $^{*}$Includes the collector outage; see caption.}
 \end{table}
 
 \subsection{Labels}
@@ -260,10 +281,14 @@ Total   & 269{,}330 &      &         &         & 4{,}247{,}432 \\
 
 For each snapshot we simulate limit orders at offsets of 1, 2, 5 and 10 basis
 points from mid on each side, rounded to the venue tick so the quote is
-postable, and record whether top-of-book traded through that level within
-horizons of 300 and 900 seconds. A buy at price $p$ is recorded filled if
-$\min(\text{best ask}) \leq p$ within the horizon; a sell if
+postable, and record whether the opposite best quote reached or crossed that
+level within horizons of 300 and 900 seconds. A buy at price $p$ is recorded as
+crossed if $\min(\text{best ask}) \leq p$ within the horizon; a sell if
 $\max(\text{best bid}) \geq p$.
+
+We call this a \emph{replay-defined crossing}. It uses no trade or execution
+data, only subsequent book snapshots, so it does not establish that a resting
+order executed.
 
 Three choices here are deliberate and were wrong in earlier versions.
 
@@ -275,18 +300,18 @@ synthetic data generator (Section~\ref{sec:defects}).
 economically comparable across these assets: BTC's 0.10 tick on a
 $\sim$65{,}000 price is 0.00015\% of mid, while SOL's 0.01 tick on
 $\sim$150 is 0.0067\%, roughly 44$\times$ larger. Under tick offsets the 1--5
-range spanned a 0.176 fill-rate gradient on SOL but only 0.011 on BTC, so
+range spanned a 0.176 crossing-rate gradient on SOL but only 0.011 on BTC, so
 ``offset'' meant different things per asset.
 
-\textbf{Unobservable rows are dropped, not labelled as non-fills.} On a feed
+\textbf{Unobservable rows are dropped, not labelled as non-crossings.} On a feed
 with a median gap of 11.5 to 48.0 seconds, some snapshots have no subsequent
-observation inside a horizon. Recording those as ``did not fill'' manufactures
+observation inside a horizon. Recording those as ``did not cross'' manufactures
 the label. Observability is 88.7\% at worst (ETH at 300\,s) and 98.8\% or above
 at 900\,s. This is why label counts are not snapshots $\times$ 16.
 
 \begin{table}[ht]
 \centering
-\caption{Fill rate by horizon and quote offset. Both conditioning variables
+\caption{Crossing rate by horizon and quote offset. Both conditioning variables
 carry strong monotone structure, which is what makes the lookup reference
 demanding.}
 \label{tab:marginals}
@@ -313,21 +338,27 @@ book imbalance, depth imbalance, and rolling statistics and lagged differences.
 Two subsets are used, both defined by keyword match on feature names. The
 \emph{microstructure} subset holds the 63 features matching spread, imbalance,
 order book imbalance, depth, volume or volatility terms and not containing
-\texttt{price}. The \emph{price} subset holds the 41 features whose names
-contain \texttt{price}, raw or normalised.
+\texttt{price}. The \emph{price-named} subset holds the 41 features whose
+names contain \texttt{price}, raw or normalised. We use that label rather than
+``price levels'' because the group includes mid-normalised columns as well as
+raw ones.
 
 The two do not partition the feature set. Five features fall into neither:
 \texttt{return\_1} and \texttt{return\_lag\_}$k$ for
 $k \in \{1,2,3,5\}$. These are lagged mid-price returns, so they are
 price-derived in substance, but the keyword rule matches the literal string
-\texttt{price} and does not capture them. The price subset is therefore price
-\emph{levels}; returns enter only the full 109-feature arm.
+\texttt{price} and does not capture them. The price-named subset therefore
+contains 41 raw or normalised price columns; the five lagged returns enter only
+the full 109-feature arm.
 
 We state this because $109 - 63 = 46$ counts non-microstructure columns rather
 than price columns, and the two differ by exactly these five returns. The
-microstructure subset is unaffected: returns match no microstructure keyword
-either, so those 63 features contain no price information in level or change
-form. Headline results use that subset, for reasons given in
+microstructure subset excludes both groups: returns match no microstructure
+keyword either. What those 63 features exclude is direct price-level columns
+and directional lagged returns. They are not free of price information in a
+strict sense, since spreads and realised volatility are themselves functions of
+prices; what they exclude is the price \emph{level} and the \emph{direction} of
+recent moves. Headline results use that subset, for reasons given in
 Section~\ref{sec:regime}.
 
 \section{Method}
@@ -335,7 +366,7 @@ Section~\ref{sec:regime}.
 
 \subsection{The reference}
 
-Our benchmark is a lookup table: the mean fill rate for each
+Our benchmark is a lookup table: the mean crossing rate for each
 (offset, horizon, side) cell, 16 cells, estimated on training data and applied
 unchanged to test data. It has no learned parameters and no access to the order
 book. Table~\ref{tab:marginals} shows what it captures.
@@ -348,8 +379,10 @@ conditioning variables. No temporal window.
 
 \textbf{Binary LSTM}: two layers, hidden dimension 64, over a 50-snapshot
 window, with the conditioning vector concatenated before a single logit head
-trained with binary cross-entropy. The comparison is deliberately unfavourable
-to the trees, which see one snapshot where the LSTM sees fifty.
+trained with binary cross-entropy. The two models receive different inputs: the LSTM
+sees a 50-snapshot history, the GBT only the current snapshot. We do not treat
+longer history as automatically advantageous, particularly on a sparse and
+irregular sequence, and state the asymmetry rather than characterising it.
 
 \subsection{Sampling}
 \label{sec:sampling}
@@ -387,8 +420,8 @@ both are necessary.
 
 \subsection{Metric}
 
-We report fill AUC: area under the ROC curve for the binary filled/not-filled
-task, computed exactly via the Mann-Whitney rank-sum identity with ties
+We report crossing AUC: area under the ROC curve for the binary
+crossed/not-crossed task, computed exactly via the Mann-Whitney rank-sum identity with ties
 credited 0.5. It measures discrimination. It does not assess calibration, so
 these results do not establish that predicted probabilities are usable as
 probabilities.
@@ -400,7 +433,7 @@ probabilities.
 
 \begin{table}[ht]
 \centering
-\caption{Fill AUC under the temporal split, three seeds. Each cell gives the
+\caption{Crossing AUC under the temporal split, three seeds. Each cell gives the
 mean, the seed standard deviation, and the gap over the lookup reference for
 that asset. GBT sees one snapshot; LSTM sees fifty.}
 \label{tab:main}
@@ -436,7 +469,7 @@ Microstructure features add measurable signal on BTC and ETH: $+0.048$ and
 $+0.060$ for the tree model on the 63-feature subset. SOL shows $-0.011$, the
 only negative entry in the table, which we resolve below.
 
-Adding the 46 non-microstructure columns (41 price levels and five lagged
+Adding the 46 non-microstructure columns (41 price-named and five lagged
 returns) \emph{hurts} on BTC and ETH, with GBT-all below GBT-micro by 0.005 and
 0.028. On SOL they appear to help substantially. This
 inconsistency is the same anomaly.
@@ -444,36 +477,51 @@ inconsistency is the same anomaly.
 \subsection{Model class}
 \label{sec:modelclass}
 
-Comparing the better arm of each model class:
+Comparing model classes requires holding the input representation fixed. An
+earlier version of this paper compared the better-performing arm of each model
+class, selected by test AUC. That is post-hoc selection on the test set: it
+allows the representation to differ by model and by asset according to which
+number is larger, and it produced a claim that trees lead on all three assets.
+Table~\ref{tab:modelclass} instead reports both representations separately.
 
 \begin{table}[ht]
 \centering
-\caption{Best gap over lookup by model class, temporal split.}
+\caption{GBT minus LSTM, holding the input representation fixed. Positive
+favours trees. Arms are not selected on test performance.}
 \label{tab:modelclass}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Asset & Best GBT & Best LSTM & Difference \\
+& \multicolumn{2}{c}{Microstructure (63)} & \multicolumn{2}{c}{All (109)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Asset & GBT $-$ LSTM & Leader & GBT $-$ LSTM & Leader \\
 \midrule
-BTC/USD & $+0.0479$ & $+0.0075$ & $+0.0404$ \\
-ETH/USD & $+0.0596$ & $+0.0386$ & $+0.0210$ \\
-SOL/USD & $+0.0383$ & $+0.0370$ & $+0.0013$ \\
+BTC/USD & $+0.0450$ & GBT  & $+0.0359$ & GBT \\
+ETH/USD & $+0.0210$ & GBT  & $+0.0239$ & GBT \\
+SOL/USD & $-0.0475$ & LSTM & $+0.0013$ & GBT \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \noindent
-Trees are ahead on all three, decisively on BTC, marginally on SOL. Version~3
-of this work reported the LSTM at exactly 0.5000 on every arm and concluded
-model class was decisive; that was a defective survival head, not a result
-(Section~\ref{sec:defects}). The corrected comparison is narrower: trees are
-better on this data, and on one asset the difference is 0.0013.
+The ordering is representation-dependent. On the 109-feature representation
+trees lead on all three assets, though by only $0.0013$ on SOL/USD, which is
+within the seed standard deviation of the SOL LSTM arm ($0.0074$). On the
+63-feature microstructure representation trees lead on BTC and ETH but trail on
+SOL by $0.0475$.
+
+We therefore do not claim a general ordering between model classes on this
+data. Trees are ahead in four of the six comparisons, clearly so on BTC under
+both representations, and the one reversal is substantial. Version~3 of this
+work reported the LSTM at exactly 0.5000 on every arm and concluded model class
+was decisive; that was a defective survival head rather than a result
+(Section~\ref{sec:defects}). The corrected comparison supports no such
+conclusion.
 
 One arm warrants caution. LSTM-all on ETH moved its training loss by only
 0.0078, against 0.1593 for LSTM-micro on the same data. That arm is likely
-undertrained rather than genuinely uninformative, and we do not draw a
-feature-count conclusion from it.
+undertrained rather than genuinely uninformative.
 
-\section{The Split Scheme Inverts a Result}
+\section{Split-Scheme Sensitivity}
 \label{sec:regime}
 
 \subsection{Diagnosis}
@@ -519,7 +567,7 @@ standard deviations of 0.0004, 0.0006 and 0.0003.}
 \label{tab:regime}
 \begin{tabular}{lrrrrrr}
 \toprule
-& \multicolumn{2}{c}{Microstructure (63)} & \multicolumn{2}{c}{Price (41)}
+& \multicolumn{2}{c}{Microstructure (63)} & \multicolumn{2}{c}{Price-named (41)}
 & \multicolumn{2}{c}{All (109)} \\
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
 Asset & Temporal & Blocked & Temporal & Blocked & Temporal & Blocked \\
@@ -554,8 +602,17 @@ ETH they move from $-0.000$ to $+0.037$ under blocking; on SOL from $+0.031$ to
 $+0.012$. We had expected blocking to reduce price-feature performance
 uniformly by removing a time proxy. It did not, and we have no account of the
 ETH reversal. Headline figures therefore use the microstructure subset, which
-excludes price-derived columns entirely and behaves consistently under both
-schemes.
+excludes direct price-level columns and directional lagged-return features,
+and behaves consistently under both schemes.
+
+\subsection{The blocked split is exploratory}
+
+The blocked split was introduced after inspecting the temporal-split results,
+prompted by SOL/USD's negative gap. Block roles are assigned by time index and
+use no outcome information, and the embargo and overlap properties are verified
+rather than assumed, but the scheme was still chosen after seeing a surprising
+result. It should be read as an exploratory information-content diagnostic
+rather than as independent confirmatory evidence.
 
 \subsection{Which scheme to believe}
 
@@ -597,7 +654,7 @@ differ.
 \textbf{3. Microsecond timestamps read as nanoseconds.} The replacement label
 builder converted timestamps with \texttt{astype("int64") / 1e9}, but Parquet
 returns \texttt{datetime64[us]}. Every interval came out 1000$\times$ too
-small, so a ``30-second'' window contained 920 snapshots and fill rates reached
+small, so a ``30-second'' window contained 920 snapshots and crossing rates reached
 0.97 with no offset gradient. \emph{Caught by} a printed diagnostic showing a
 median gap of 0.0\,s against a known 11.5\,s. The current builder raises if the
 median gap is below 1 second.
@@ -635,12 +692,28 @@ projection was extrapolated from noise generated by the defect.
 \textbf{No economic evaluation.} AUC is not profit, and we do not model
 transaction costs, queue position or adverse selection.
 
-\textbf{Simulated fills.} Labels come from replaying book states. A quote is
-filled when top-of-book trades through its level, which is optimistic for a
-late queue arrival.
+\textbf{The label is a crossing proxy, not an execution.} Labels come from
+replaying book snapshots and use no trade data. A quote is recorded as crossed
+when the opposite best quote reaches or crosses its price. This is optimistic for a
+late queue arrival, since a crossing does not imply the resting order executed.
+
+\textbf{Brief crossings between snapshots are missed.} With median inter-update
+gaps of 11.5 to 48.0 seconds, a crossing that occurs and reverses within a
+single gap leaves no trace in the data and is labelled as a non-crossing. The
+direction of the resulting bias is not established: it depends on whether such
+transient crossings correlate with the microstructure state at submission.
 
 \textbf{Two horizons.} 300 and 900 seconds, chosen because observability at 30
 and 60 seconds fell to 41--54\% on ETH and SOL.
+
+\textbf{Observability selection.} Labels exist only where at least one
+subsequent book snapshot falls inside the horizon. Because the feed is
+event-driven, update intensity is state-dependent, and quiet states are more
+likely to be unobservable. Dropping those rows may therefore select toward more
+active market states. At the worst case, ETH/USD at 300\,s, 11.3\% of potential
+observations are dropped. We do not quantify this selection effect, so our
+results are more precisely stated as predictive content for the crossing
+outcome \emph{conditional on sufficient subsequent book observability}.
 
 \textbf{One venue, one window, three assets.}
 
@@ -658,15 +731,15 @@ support.
 
 \section{Conclusion}
 
-Given a quote offset and a holding horizon --- both known to the trader for
-free --- limit order book microstructure adds roughly 0.04 AUC to fill
-prediction on this data. Under a blocked split the gain is $+0.048$, $+0.049$
+Given side, quote offset and holding horizon --- all known to the trader for
+free --- limit order book microstructure adds roughly 0.04 AUC to predicting
+our replay-defined crossing outcome on this data. Under a blocked split the gain is $+0.048$, $+0.049$
 and $+0.027$ across three cryptocurrency pairs, with seed variation an order of
 magnitude smaller than the effect. Under a forecasting-ordered temporal split
 it holds on two of three assets, and the third is sensitive to temporal
 distribution shift rather than showing absent signal.
 
-That is a real effect and a small one. It is smaller than the numbers we
+That is a measured effect and a small one. It is smaller than the numbers we
 reported in three previous versions of this work, each of which was inflated by
 a defect in our own pipeline. We consider the catalogue in
 Section~\ref{sec:defects} at least as useful as the measurement, because the
