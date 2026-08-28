@@ -36,7 +36,7 @@ using book snapshots only and no trade data.
 Earlier versions of this project (v1–v3) were titled *Latency-Compensating
 Market Making: An AI Framework for Retail Liquidity Provision* and framed
 around 200 ms–2 s execution latency. **Those results should not be cited.**
-Section 6 of the current paper documents five pipeline defects that invalidated
+Section 7 of the current paper documents five pipeline defects that invalidated
 them, including a synthetic 100 ms clock applied to real data, which made the
 labels described as "2000 ms" horizons a 511-second median window. The
 frequently quoted "7× drawdown reduction" came from synthetic data with a
@@ -55,7 +55,7 @@ build_labels_v2.py       corrected label builder (real timestamps, bps offsets)
 verify_v3.py             pre-experiment checks; exits non-zero on failure
 rerun_v3.py              main experiment: lookup vs GBT vs LSTM
 regime_test.py           temporal vs blocked split comparison
-rotation_test.py         10 block-phase rotations (partition variance)
+rotation_test.py         10 block-phase rotations (phase robustness)
 sol_diagnostic.py        feature-group decomposition
 gbm_*.py                 earlier GBT comparisons and leakage audit
 results/                 all result CSVs
@@ -105,7 +105,7 @@ retail-accessible sampling frequency. Working Paper v4.
 ## AI assistance
 
 Claude (Anthropic) was used for implementation, diagnosis and manuscript
-drafting. Several defects catalogued in Section 6 originated in AI-generated
+drafting. Several defects catalogued in Section 7 originated in AI-generated
 code, and several were identified through AI-assisted diagnosis. The author
 directed the analysis, verified the results, and is responsible for all
 content.

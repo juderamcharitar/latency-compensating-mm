@@ -27,9 +27,10 @@ retail-accessible sampling frequency}
 
 \begin{abstract}
 \noindent
-A trader deciding where to post a limit order knows two things for free: how
-far from mid they intend to quote, and how long they are willing to wait.
-Whether limit order book (LOB) microstructure adds anything beyond those two
+A trader deciding where to post a limit order knows three things for free:
+which side they intend to quote, how far from mid, and how long they are
+willing to wait.
+Whether limit order book (LOB) microstructure adds anything beyond those three
 choices is an empirical question, and one rarely posed against a baseline
 simple enough to make the answer interpretable.
 
@@ -46,10 +47,11 @@ Microstructure features beat it, modestly and consistently. Under a
 snapshot-grouped temporal split with a 990-second embargo, gradient-boosted
 trees over 63 microstructure features gain $+0.048$ and $+0.060$ AUC on BTC and
 ETH (Table~\ref{tab:main} reports all figures to four decimals). Under a blocked split constructed so that training and test partitions
-span overlapping price regimes, the gains are $+0.048$, $+0.049$ and $+0.027$ on
-all three assets, with seed standard deviations at or below $0.0006$
-(Table~\ref{tab:regime}). The mean across assets under blocking is
-$+0.0415$.
+span overlapping price regimes, the gain is positive on all three assets.
+Rotating the arbitrary block phase gives ten phase assignments with disjoint
+test sets per asset, and all thirty are positive: means of $+0.047$, $+0.038$
+and $+0.035$, with no rotation below $+0.013$. Across-phase standard deviations
+are 0.0052, 0.0144 and 0.0103.
 
 The split scheme matters, and revealed something we would otherwise have
 misreported. Under the temporal split, training and test partitions occupied
@@ -107,9 +109,10 @@ Microstructure adds a modest, consistent amount. Under a blocked split that
 reduces temporal distribution shift between partitions, gradient-boosted trees
 over
 microstructure features gain $+0.048$, $+0.049$ and $+0.027$ AUC over the
-lookup reference on BTC/USD, ETH/USD and SOL/USD, mean $+0.0415$. Seed standard
-deviations are $0.0006$ or below, so the ordering is stable across the three
-model seeds.
+lookup reference on BTC/USD, ETH/USD and SOL/USD. Rotating the block phase
+yields ten phase assignments with disjoint test sets per asset, and all thirty
+gaps are positive, with
+means of $+0.047$, $+0.038$ and $+0.035$ and no rotation below $+0.013$.
 
 The finding is robust to split scheme on two of three assets and changes sign
 on the third. We examine this split sensitivity in
@@ -143,8 +146,9 @@ geometry, against an explicit trivial reference, on three assets under two
 split schemes (Sections~\ref{sec:results}, \ref{sec:regime}).
 
 \item Evidence that the sign of a microstructure result can depend on split
-scheme under substantial temporal distribution shift, together with the
-diagnostic that detects it (Section~\ref{sec:regime}).
+scheme under substantial temporal distribution shift, with the diagnostic that
+detects it and a phase-rotation test that quantifies dispersion across
+block-phase assignments (Section~\ref{sec:regime}).
 
 \item A dataset of 269{,}330 timestamped 10-level LOB snapshots, with the full
 collection, labelling and evaluation pipeline released publicly
@@ -164,9 +168,10 @@ quote offset and horizon on BTC/USD and ETH/USD, at $+0.048$ and $+0.060$ AUC,
 recoverable by gradient-boosted trees. SOL/USD is negative under this split.
 
 \textbf{Observed under the blocked-split diagnostic.} The same gain appears on
-all three assets, at $+0.027$ to $+0.049$ AUC. That split was introduced after
-inspecting the temporal results (Section~\ref{sec:regime}) and is exploratory
-rather than confirmatory.
+all three assets across all ten block-phase rotations, 30 of 30 positive, with
+means of $+0.047$, $+0.038$ and $+0.035$. That split was introduced after
+inspecting the temporal results (Section~\ref{sec:regime}) and remains an
+information-content diagnostic rather than a forecasting evaluation.
 
 \textbf{Not established: economic exploitability.} AUC is not profit. We run no
 backtest, model no transaction costs, and make no claim that this edge survives
@@ -595,7 +600,8 @@ composition, temporal distance between partitions, and whether training data
 may post-date test data. We have not isolated which of these drives the
 reversal. With
 blocking, all three assets show a positive microstructure gap, ranging
-$+0.027$ to $+0.049$ with a mean of $+0.0415$.
+$+0.027$ to $+0.049$ at the reported phase and positive across all ten phase
+rotations (Section~\ref{sec:rotation}).
 
 \textbf{Price features behave inconsistently and we do not rely on them.} On
 ETH they move from $-0.000$ to $+0.037$ under blocking; on SOL from $+0.031$ to
@@ -605,14 +611,90 @@ ETH reversal. Headline figures therefore use the microstructure subset, which
 excludes direct price-level columns and directional lagged-return features,
 and behaves consistently under both schemes.
 
+\subsection{Rotating the block phase}
+\label{sec:rotation}
+
+The block assignment uses one phase: blocks are assigned by index modulo 10,
+with 0--6 training, 7--8 validation and 9 test. That phase is arbitrary, so we
+ran all ten rotations, holding the 150 blocks, the 990-second embargo, the
+63-feature representation and the model specification fixed. Phase $p$ assigns
+roles by $(\text{block index} + p) \bmod 10$. The resulting test sets are
+disjoint across phases and together cover 95\% of eligible snapshots, so each
+retained snapshot serves as test data in exactly one rotation. The training
+sets overlap heavily and all rotations draw on the same underlying series, so
+the rotations are not statistically independent.
+
+\begin{table}[ht]
+\centering
+\caption{Microstructure gap over lookup across 10 block phases, 63-feature
+representation. Every rotation is positive on every asset.}
+\label{tab:rotation}
+\begin{tabular}{lrrrrr}
+\toprule
+Asset & Mean & SD & Min & Max & Positive \\
+\midrule
+BTC/USD & $+0.0473$ & 0.0052 & $+0.0378$ & $+0.0529$ & 10/10 \\
+ETH/USD & $+0.0382$ & 0.0144 & $+0.0130$ & $+0.0550$ & 10/10 \\
+SOL/USD & $+0.0346$ & 0.0103 & $+0.0133$ & $+0.0463$ & 10/10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+All 30 rotations are positive. The assignment used in Table~\ref{tab:regime} is
+phase 0 under this parameterisation, identifiable by its lookup values matching
+that table exactly on all three assets. It is included above and is not an
+outlier: it gives $+0.0483$, $+0.0484$ and $+0.0273$ against rotation means of
+$+0.0473$, $+0.0382$ and $+0.0346$. Those differ from Table~\ref{tab:regime}'s
+$+0.0479$, $+0.0491$ and $+0.0274$ by at most 0.0007, the rotations using one
+seed against three.
+
+The standard deviations in Table~\ref{tab:rotation} summarise dispersion
+across the ten block-phase assignments. They are not a general estimate of
+sampling or partition uncertainty, since the phases share training data and one
+underlying series. They exceed the seed standard deviations of
+Table~\ref{tab:main} by roughly an order of magnitude, which is the expected
+ordering.
+
+Two rotations sit close to zero: ETH/USD phase 7 at $+0.0130$ and SOL/USD phase
+1 at $+0.0133$. The effect is consistently signed but small enough that an
+individual partition can nearly absorb it.
+
+\subsection{The gap is not consistently associated with price-range overlap}
+\label{sec:overlap-covariate}
+
+Price-range overlap varies across rotations, from 0.603 to 0.961 on BTC/USD,
+0.712 to 0.977 on ETH/USD and 0.534 to 0.787 on SOL/USD. Since the blocked
+split was introduced to raise overlap, a natural concern is that the gap simply
+tracks it.
+
+We observe no consistent association across the ten rotations. Correlations
+between overlap and gap are $-0.17$, $+0.33$ and $-0.14$, differing in sign by
+asset. Splitting each asset's
+rotations at its median overlap gives mean gaps of $+0.0479$, $+0.0387$ and
+$+0.0373$ in the low-overlap half against $+0.0467$, $+0.0377$ and $+0.0320$ in
+the high-overlap half: marginally larger where overlap is worse, on two of three
+assets.
+
+We treated overlap as a measured covariate rather than a selection criterion.
+An earlier version of the rotation script required every rotation to exceed 0.7
+overlap and aborted when BTC/USD (minimum 0.603) and SOL/USD (0.534) failed.
+Gating on overlap would have selected partitions by a property plausibly
+related to the outcome, which is the defect the rotation test exists to rule
+out.
+
 \subsection{The blocked split is exploratory}
 
 The blocked split was introduced after inspecting the temporal-split results,
-prompted by SOL/USD's negative gap. Block roles are assigned by time index and
-use no outcome information, and the embargo and overlap properties are verified
-rather than assumed, but the scheme was still chosen after seeing a surprising
-result. It should be read as an exploratory information-content diagnostic
-rather than as independent confirmatory evidence.
+prompted by SOL/USD's negative gap, and is in that sense exploratory. Two
+things limit how much that concerns us. Block roles are assigned by time index
+and use no outcome information. And the result does not depend on the one
+arbitrary choice the scheme makes: all ten phase rotations are positive on all
+three assets (Section~\ref{sec:rotation}), so the reported partition is not a
+favourable selection from the available alternatives.
+
+It remains an information-content diagnostic rather than a forecasting
+evaluation, for the reason given below.
 
 \subsection{Which scheme to believe}
 
@@ -720,10 +802,13 @@ outcome \emph{conditional on sufficient subsequent book observability}.
 \textbf{One deep architecture.} An LSTM at one hyperparameter setting. The ETH
 LSTM-all arm is likely undertrained.
 
-\textbf{Partition variance is not quantified.} Seeds vary model
-initialisation, not the data partition. We evaluate two partition schemes
-(Section~\ref{sec:regime}) rather than a distribution over partitions, so the
-reported standard deviations understate total uncertainty.
+\textbf{Blocked-phase sensitivity is quantified; general partition uncertainty
+is not.} Seed standard deviations in Table~\ref{tab:main} vary model
+initialisation only. Table~\ref{tab:rotation} reports dispersion across the ten
+exhaustive phase rotations of this blocked scheme, which is not a general
+estimate of sampling or partition uncertainty: the rotations share training
+data and one underlying series. No equivalent distribution exists for the
+temporal split, which admits a single forecasting-ordered cut.
 
 \textbf{The price-feature behaviour is unexplained.} We report it and exclude
 those features from headline results rather than offering an account we cannot
@@ -733,9 +818,9 @@ support.
 
 Given side, quote offset and holding horizon --- all known to the trader for
 free --- limit order book microstructure adds roughly 0.04 AUC to predicting
-our replay-defined crossing outcome on this data. Under a blocked split the gain is $+0.048$, $+0.049$
-and $+0.027$ across three cryptocurrency pairs, with seed variation an order of
-magnitude smaller than the effect. Under a forecasting-ordered temporal split
+our replay-defined crossing outcome on this data. Under a blocked split the gain is positive across three cryptocurrency pairs
+and all ten block-phase rotations, 30 of 30, with means of $+0.047$, $+0.038$
+and $+0.035$. Under a forecasting-ordered temporal split
 it holds on two of three assets, and the third is sensitive to temporal
 distribution shift rather than showing absent signal.
 

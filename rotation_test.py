@@ -21,12 +21,16 @@ specification. Phase p assigns role = f((block_index + p) % 10).
 Rotation is a legitimate robustness axis because the phase is arbitrary and
 carries no information about outcomes. If the microstructure gap stays positive
 across rotations on all three assets, the blocked result is not a lucky
-partition. The spread across rotations also gives the partition variance that
-the paper currently lists as unquantified.
+partition.
 
-PRE-REGISTERED READING, fixed before running:
+The spread across rotations quantifies dispersion across block-phase
+assignments. It is NOT a general estimate of partition or sampling
+uncertainty: the phases share training data and one underlying series, and
+only their test sets are disjoint.
+
+PRE-SPECIFIED READING, fixed before running:
   - gap positive in >= 8 of 10 rotations on all three assets
-        -> robust; report mean and range across rotations as the headline
+        -> robust; report mean and range across phase assignments
   - positive on BTC/ETH but mixed on SOL
         -> report per-asset; SOL's blocked result is phase-sensitive and the
            paper should say so rather than averaging it away
@@ -45,13 +49,14 @@ correlated with the outcome, which is the same defect the rotation test exists
 to avoid. Overlap is instead measured per rotation and reported alongside the
 gap, so its relationship to the result is visible rather than assumed.
 
-SECOND PRE-REGISTERED READING, on that relationship:
-  - gap positive across rotations regardless of overlap
-        -> the effect does not depend on distributional overlap; stronger
-           than the current blocked-split result
+SECOND PRE-SPECIFIED READING, on that relationship:
+  - gap positive across rotations spanning a range of overlap values
+        -> no consistent evidence in this diagnostic that the gap is
+           associated with price-range overlap
   - gap positive only in high-overlap rotations
-        -> overlap drives the effect; SOL's temporal reversal and blocked
-           recovery are both overlap artefacts and the paper must say so
+        -> the gap is associated with overlap in this diagnostic, and SOL's
+           temporal reversal and blocked recovery should be read in that
+           light
 
 Run:  python rotation_test.py --seeds 1
 """
@@ -258,17 +263,19 @@ def main():
         print(f"  {a}: overlap {d.overlap.min():.3f}-{d.overlap.max():.3f} | "
               f"gap low-overlap {lo.gap.mean():+.4f}  high-overlap {hi.gap.mean():+.4f} | "
               f"corr {r:+.2f}")
-    print("  A gap that holds in low-overlap rotations does not depend on")
-    print("  distributional overlap. A gap that tracks overlap does.")
+    print("  A gap that remains positive across low- and high-overlap")
+    print("  rotations is not consistently associated with overlap in this")
+    print("  diagnostic. A gap that tracks overlap is.")
     print("=" * 74)
 
     npos = s["n_positive"]
-    print(f"\nphase 9 (the published one) is included above.")
+    print(f"\nphase 0 is the assignment used in regime_test.py, identifiable")
+    print(f"by its lookup values matching that run.")
     print(f"positive rotations: {dict(npos)}")
     if (npos >= 8).all():
         print("\nROBUST. The gap is positive in at least 8 of 10 rotations on")
         print("every asset. Report mean and range across phases; this also")
-        print("quantifies partition variance, which was previously unmeasured.")
+        print("quantifies dispersion across block-phase assignments.")
     elif (npos.drop("SOLUSD", errors="ignore") >= 8).all():
         print("\nBTC/ETH robust; SOL phase-sensitive. Report per-asset and say")
         print("SOL's blocked result depends on the partition phase.")

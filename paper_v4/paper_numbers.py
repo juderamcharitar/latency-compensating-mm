@@ -59,3 +59,17 @@ DEFECTS = dict(
     fingerprint_expected=111002*32, fingerprint_actual=3551392,
     c1_auc=0.9861,
 )
+
+
+# rotation_test.py — 10 block phases, 63-feature microstructure, 1 seed
+ROTATION = {
+    "BTCUSD": dict(mean=0.0473, sd=0.0052, lo=0.0378, hi=0.0529, npos=10,
+                   ov_lo=0.603, ov_hi=0.961, corr=-0.17,
+                   gap_lowov=0.0479, gap_highov=0.0467),
+    "ETHUSD": dict(mean=0.0382, sd=0.0144, lo=0.0130, hi=0.0550, npos=10,
+                   ov_lo=0.712, ov_hi=0.977, corr=+0.33,
+                   gap_lowov=0.0387, gap_highov=0.0377),
+    "SOLUSD": dict(mean=0.0346, sd=0.0103, lo=0.0133, hi=0.0463, npos=10,
+                   ov_lo=0.534, ov_hi=0.787, corr=-0.14,
+                   gap_lowov=0.0373, gap_highov=0.0320),
+}
