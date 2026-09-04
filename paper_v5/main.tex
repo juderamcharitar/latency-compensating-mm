@@ -35,18 +35,21 @@ ETH/USD and SOL/USD, we predict a replay-defined crossing outcome at 300- and
 the historical crossing rate for each combination of side, quote offset and
 horizon. Under a snapshot-grouped forecasting-ordered split with a 990-second
 embargo, gradient-boosted trees using 63 microstructure features improve AUC by
-0.0479 on BTC/USD and 0.0596 on ETH/USD, while SOL/USD is 0.0105 below the
-lookup reference. The SOL result is sensitive to temporal distribution shift:
-under an exploratory blocked diagnostic that increases train-test price-range
-overlap, the microstructure gap is positive for all three assets, and remains
-positive in all 30 asset-by-phase evaluations across ten block rotations. These
-blocked results are interpreted as evidence of information content rather than
-prospective forecasting performance because training observations may post-date
-test observations. Model-class comparisons are representation-dependent and do
-not support a general ranking between gradient-boosted trees and an LSTM. The
-results show that LOB state contains measurable incremental information beyond
-quote geometry in this sample, while also illustrating how split design and
-pipeline validation can materially change conclusions.
+0.0480 on BTC/USD and 0.0596 on ETH/USD. Paired block-bootstrap 95\% confidence
+intervals, using contiguous one-hour time blocks, are [0.0400, 0.0551] and
+[0.0427, 0.0751], respectively. On SOL/USD the corresponding gap is -0.0105
+with a 95\% interval of [-0.0283, 0.0075], so the forecasting-ordered effect is
+not distinguishable from zero there. Under an exploratory blocked diagnostic
+that increases train-test price-range overlap, the microstructure gap is
+positive for all three assets and remains positive in all 30 asset-by-phase
+evaluations across ten block rotations. These blocked results are interpreted
+as evidence of information content rather than prospective forecasting
+performance because training observations may post-date test observations.
+Model-class comparisons are representation-dependent and do not support a
+general ranking between gradient-boosted trees and an LSTM. The results show
+that LOB state contains robust incremental predictive information beyond quote
+geometry for BTC/USD and ETH/USD in this sample, while also illustrating how
+split design and pipeline validation can materially change conclusions.
 
 \vspace{0.8em}
 \noindent\textbf{Keywords:} limit order book, market microstructure, crossing
@@ -80,15 +83,19 @@ lookup reference that uses only side, quote offset and horizon.
 
 Our primary evaluation is forecasting-ordered. On BTC/USD and ETH/USD,
 gradient-boosted trees using 63 microstructure features improve AUC over the
-lookup reference by 0.0479 and 0.0596. On SOL/USD the corresponding gap is
--0.0105. The negative SOL result coincides with substantial temporal
-distribution shift: train and test price ranges overlap by only 0.251, compared
-with 0.129 for BTC and 0.073 for ETH. Because absolute price can become a proxy
-for partition membership over a trending sample, we separately use a blocked
-split as an information-content diagnostic. That split raises price-range
-overlap and produces positive microstructure gaps on all three assets. Across
-ten block-phase rotations, all 30 asset-by-phase gaps remain positive, with
-means of 0.0473, 0.0382 and 0.0346 for BTC, ETH and SOL.
+lookup reference by 0.0480 and 0.0596. Dependence-aware paired block-bootstrap
+95\% confidence intervals are [0.0400, 0.0551] and [0.0427, 0.0751], so both
+effects remain clearly positive after resampling contiguous one-hour time
+blocks. On SOL/USD the corresponding gap is -0.0105 with a 95\% interval of
+[-0.0283, 0.0075], which is not distinguishable from zero. The SOL result also
+coincides with substantial temporal distribution shift: train and test price
+ranges overlap by only 0.251, compared with 0.129 for BTC and 0.073 for ETH.
+Because absolute price can become a proxy for partition membership over a
+trending sample, we separately use a blocked split as an information-content
+diagnostic. That split raises price-range overlap and produces positive
+microstructure gaps on all three assets. Across ten block-phase rotations, all
+30 asset-by-phase gaps remain positive, with means of 0.0473, 0.0382 and 0.0346
+for BTC, ETH and SOL.
 
 The blocked analysis is intentionally secondary. It is not a prospective
 forecasting test because training observations may occur after test
@@ -288,11 +295,23 @@ regimes across partitions but permits training observations to post-date test
 observations. It therefore cannot be interpreted as a prospective trading or
 forecasting evaluation.
 
-\subsection{Metric}
+\subsection{Metric and dependence-aware uncertainty}
 
 We report ROC AUC for the binary crossing outcome, computed with ties credited
 0.5. AUC measures ranking rather than calibration and does not imply economic
 value.
+
+For the headline temporal-split comparison between the 63-feature GBT and the
+lookup reference, we additionally estimate uncertainty in the paired AUC
+difference using a block bootstrap. The row-level test predictions from both
+models are resampled together in contiguous one-hour calendar-time blocks, so
+all label rows associated with a given snapshot remain in the same resampled
+unit and nearby observations are not treated as independent draws. We use 2,000
+bootstrap resamples and report percentile 95\% confidence intervals for
+$\Delta\mathrm{AUC}=\mathrm{AUC}_{\mathrm{GBT}}-\mathrm{AUC}_{\mathrm{lookup}}$.
+The one-hour block length exceeds the maximum 900-second label horizon and is
+intended to be conservative relative to the mechanical dependence induced by
+forward-looking labels.
 
 \section{Results}
 \label{sec:results}
@@ -324,258 +343,173 @@ SOL/USD & 0.6673 & 0.6568 & 0.7056 & 0.7043 & 0.7043 \\
 \end{tabular}
 \end{table}
 
-The headline microstructure result is positive on BTC/USD and ETH/USD: the GBT
-using the 63-feature subset gains 0.0479 and 0.0596 AUC over the lookup
-reference. SOL/USD is the exception at -0.0105. Adding the non-microstructure
-columns lowers GBT performance on BTC and ETH but raises it on SOL, suggesting
-that the SOL sample behaves differently under the forecasting-ordered split.
-Section~\ref{sec:regime} examines this sensitivity.
+Microstructure features add measurable signal on BTC and ETH in the primary
+forecasting-ordered evaluation. The GBT-micro arm improves over the lookup by
+0.0480 and 0.0596, respectively. The paired block-bootstrap intervals are
+[0.0400, 0.0551] for BTC/USD and [0.0427, 0.0751] for ETH/USD, excluding zero
+comfortably in both cases. SOL/USD has a gap of -0.0105 with a 95\% interval of
+[-0.0283, 0.0075], so the temporal-split result there is statistically
+inconclusive rather than evidence of a reliably negative effect.
 
-Seed standard deviations are small relative to the BTC and ETH gaps, but they
-measure only model-initialisation variation. They are not confidence intervals
-for the data-generating process, and the label rows are not treated as
-independent observations for inferential purposes because multiple rows arise
-from each snapshot and adjacent snapshots are serially dependent.
+The bootstrap uses 125 one-hour blocks for BTC/USD, 227 for ETH/USD and 253 for
+SOL/USD, with 2,000 valid resamples in each asset. Test sets contain 29,895,
+29,391 and 29,994 label rows corresponding to 14,156, 5,074 and 15,196 distinct
+snapshots, respectively.
 
-\subsection{Model-class comparison}
+Adding the 46 non-microstructure columns (41 price-named variables and five
+lagged returns) hurts on BTC and ETH and helps on SOL, which motivates treating
+feature-group behaviour as a diagnostic rather than a general structural
+finding.
+
+\subsection{Model class}
 \label{sec:modelclass}
 
-Comparisons between GBT and LSTM are made within the same feature
-representation rather than by selecting each model's best test-set arm.
-
-\begin{table}[ht]
-\centering
-\caption{GBT minus LSTM AUC under the temporal split, holding feature
-representation fixed. Positive values favour GBT.}
-\label{tab:modelclass}
-\begin{tabular}{lrrrr}
-\toprule
-& \multicolumn{2}{c}{Microstructure (63)} & \multicolumn{2}{c}{All (109)} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}
-Asset & GBT $-$ LSTM & Leader & GBT $-$ LSTM & Leader \\
-\midrule
-BTC/USD & $+0.0450$ & GBT & $+0.0359$ & GBT \\
-ETH/USD & $+0.0210$ & GBT & $+0.0239$ & GBT \\
-SOL/USD & $-0.0475$ & LSTM & $+0.0013$ & GBT \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The ranking is representation-dependent. Trees lead on BTC and ETH under both
-representations. On SOL, the LSTM leads by 0.0475 on the microstructure subset,
-while GBT leads by only 0.0013 on the full representation, less than the
-reported seed dispersion of the SOL LSTM arm. We therefore draw no general
-model-class conclusion from these data. The ETH LSTM-all arm is also likely
-undertrained: its training loss moved only 0.0078, versus 0.1593 for LSTM-micro
-on the same data.
+Comparing model classes requires holding the feature representation fixed.
+Under the 109-feature representation, trees lead on all three assets, though by
+only 0.0013 on SOL/USD. Under the 63-feature microstructure representation,
+trees lead on BTC/USD and ETH/USD but trail on SOL/USD by 0.0475. We therefore
+do not claim a general ordering between gradient-boosted trees and the LSTM.
 
 \section{Split-Scheme Sensitivity}
 \label{sec:regime}
 
-\subsection{Temporal distribution shift}
+SOL's inconclusive temporal result prompted a diagnostic examination of train-
+test regime overlap. Under the temporal split, price-range overlap is 0.129 on
+BTC/USD, 0.073 on ETH/USD and 0.251 on SOL/USD. The blocked split raises these
+to 0.815, 0.855 and 0.745.
 
-The negative SOL microstructure gap motivated a diagnostic of train-test price
-range overlap. Under the temporal split, overlap is low on all three assets.
+Under that blocked diagnostic, the microstructure gaps are +0.0479, +0.0491 and
++0.0274 for BTC/USD, ETH/USD and SOL/USD. Rotating the arbitrary block phase
+across all ten possible assignments gives mean gaps of +0.0473, +0.0382 and
++0.0346, and all 30 asset-by-phase evaluations are positive. These rotations
+share training data and therefore are not independent observations; they are a
+sensitivity analysis over the arbitrary block phase, not a sampling-based
+confidence interval.
 
-\begin{table}[ht]
-\centering
-\caption{Overlap between training and test price ranges. Low overlap means
-absolute price can become informative about partition membership.}
-\label{tab:overlap}
-\begin{tabular}{lrr}
-\toprule
-Asset & Temporal & Blocked \\
-\midrule
-BTC/USD & 0.129 & 0.815 \\
-ETH/USD & 0.073 & 0.855 \\
-SOL/USD & 0.251 & 0.745 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The blocked split substantially increases overlap, but changes more than price
-range alone: it also changes regime composition, temporal distance between
-partitions and the direction of information flow. We therefore do not interpret
-it as isolating a price-level mechanism.
-
-\subsection{Blocked information-content diagnostic}
-
-\begin{table}[ht]
-\centering
-\caption{Gap over lookup by feature group and split scheme, three seeds. The
-blocked split is diagnostic rather than prospective.}
-\label{tab:regime}
-\begin{tabular}{lrrrrrr}
-\toprule
-& \multicolumn{2}{c}{Microstructure (63)} & \multicolumn{2}{c}{Price-named (41)}
-& \multicolumn{2}{c}{All (109)} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-Asset & Temporal & Blocked & Temporal & Blocked & Temporal & Blocked \\
-\midrule
-BTC/USD & $+0.0479$ & $+0.0479$ & $+0.0384$ & $+0.0383$ & $+0.0434$ & $+0.0456$ \\
-ETH/USD & $+0.0596$ & $+0.0491$ & $-0.0001$ & $+0.0370$ & $+0.0312$ & $+0.0513$ \\
-SOL/USD & $-0.0105$ & $+0.0274$ & $+0.0312$ & $+0.0115$ & $+0.0383$ & $+0.0295$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-BTC and ETH remain positive under both schemes. SOL changes from -0.0105 under
-the temporal split to +0.0274 under blocking. We interpret that reversal as
-split sensitivity under temporal distribution shift, not as proof of a specific
-causal mechanism. Price-named features also behave inconsistently across assets,
-so headline claims rely on the 63-feature microstructure subset.
-
-\subsection{Block-phase rotations}
-\label{sec:rotation}
-
-The blocked assignment has an arbitrary phase. We therefore rotate the phase
-through all ten assignments while holding the 150 blocks, embargo, feature
-representation and model specification fixed. Test sets are disjoint across the
-ten phases for each asset, although training sets overlap heavily and the
-rotations are not statistically independent.
-
-\begin{table}[ht]
-\centering
-\caption{Microstructure gap over lookup across ten blocked phases.}
-\label{tab:rotation}
-\begin{tabular}{lrrrrr}
-\toprule
-Asset & Mean & SD & Min & Max & Positive \\
-\midrule
-BTC/USD & $+0.0473$ & 0.0052 & $+0.0378$ & $+0.0529$ & 10/10 \\
-ETH/USD & $+0.0382$ & 0.0144 & $+0.0130$ & $+0.0550$ & 10/10 \\
-SOL/USD & $+0.0346$ & 0.0103 & $+0.0133$ & $+0.0463$ & 10/10 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-All 30 asset-by-phase evaluations are positive. The across-phase dispersion is
-substantially larger than model-seed dispersion, which underscores that
-partition choice matters more than stochastic model initialisation in this
-experiment. These standard deviations are descriptive sensitivity measures,
-not independent-sample standard errors.
-
-Price-range overlap itself does not show a consistent association with the gap
-across the ten phases: correlations are -0.17, +0.33 and -0.14 for BTC, ETH and
-SOL. This weak and inconsistent pattern is another reason not to attribute the
-SOL reversal to price overlap alone.
+The distinction between the two split schemes is central. The temporal split
+preserves forecasting order and supplies the primary evidence. The blocked
+split reduces regime mismatch but permits training observations to occur after
+test observations. We therefore use it to assess information content and split
+sensitivity, not prospective performance.
 
 \section{Validation, Failure Modes, and Reproducibility Checks}
 \label{sec:defects}
 
-During development, several pipeline failures produced outputs that would have
-looked plausible without targeted diagnostics. We report them because they
-motivate the final validation design.
+Several development-stage defects produced plausible output and therefore
+motivated explicit validation checks in the final pipeline.
 
-\textbf{Conditioning omission.} Quote offset was initially absent from the
-conditioning vector. Label rows from the same snapshot therefore shared model
-inputs while carrying different targets. A lookup-table positive control exposed
-the failure because the reference could outperform the learned model.
+\textbf{Quote offset omitted from conditioning.} Label rows from the same
+snapshot but different offsets initially presented identical model input with
+different targets. A simple lookup baseline exposed the problem because the
+model failed to beat information already contained in quote geometry.
 
-\textbf{Incorrect horizon resolution.} A synthetic 100-millisecond interval was
-initially applied to real, irregularly sampled data. Nominal millisecond
-horizons then corresponded to tens or hundreds of seconds in calendar time. The
-final pipeline resolves horizons against timestamps.
+\textbf{Synthetic snapshot timing applied to real data.} A hardcoded 100 ms
+interval caused intended sub-second horizons to map to windows lasting tens or
+hundreds of seconds in real calendar time. The corrected label builder resolves
+horizons directly against timestamps.
 
-\textbf{Timestamp-unit error.} Microsecond timestamps were once interpreted as
-nanoseconds, shrinking measured intervals by a factor of 1000. A median-gap
-assertion now fails when the recovered cadence is inconsistent with the source
-feed.
+\textbf{Timestamp unit mismatch.} Microsecond timestamps were temporarily
+interpreted as nanoseconds, shrinking measured intervals by a factor of 1,000.
+The current pipeline asserts plausible median inter-update gaps before labels
+are constructed.
 
-\textbf{Target-head mismatch.} Binary labels were initially passed to a
-survival-style decoder with a constant observed time, producing a fixed loss and
-AUC of 0.5000. A planted-signal positive control verified that the corrected
-binary head can learn when signal is present.
+\textbf{Model-head mismatch.} Binary labels were passed to a survival-style
+head with a constant observed time, producing apparently valid but inert AUCs of
+0.5000. A planted-signal positive control now verifies that the binary model can
+learn when signal is known to exist.
 
-\textbf{Split-proportion error.} Partition boundaries based on elapsed time
-rather than snapshot count produced realised proportions far from the intended
-70/15/15 split. The final pipeline asserts realised grouped proportions.
+\textbf{Split proportions defined on clock time rather than observation
+count.} Uneven snapshot density produced unintended partition sizes. The final
+split is grouped by snapshot and asserts realised proportions and embargo gaps.
 
-The common lesson is that plausible headline metrics are not sufficient
-validation. The final workflow therefore runs the trivial reference before the
-main model, includes a planted-signal positive control, verifies timestamp
-cadence and asserts split properties and embargo conditions.
+These failures motivate three general practices used throughout the final
+analysis: benchmark against a trivial reference before interpreting a complex
+model, use positive controls for the learning pipeline, and verify realised
+split properties rather than assuming they follow from code intent.
 
 \section{Limitations}
 
-\textbf{Crossing is not execution.} The outcome is reconstructed from future
-book snapshots. A price crossing does not establish that a resting order filled,
-especially for an order arriving late in the queue.
+\textbf{No economic evaluation.} AUC is not profit, and we do not model
+transaction costs, queue position or adverse selection.
 
-\textbf{Transient crossings can be missed.} With median inter-update gaps of
-11.5 to 48.0 seconds, a crossing can occur and reverse between observations.
-The direction of any resulting bias is not established.
+\textbf{The label is a crossing proxy, not an execution.} Labels use future book
+snapshots rather than trades or queue data, so a recorded crossing does not
+establish that a resting order executed.
 
-\textbf{Observability is state-dependent.} Labels require at least one future
-book observation within the horizon. Quiet states may therefore be
-underrepresented. In the worst case, ETH/USD at 300 seconds, 11.3\% of
-potential observations are dropped.
+\textbf{Brief crossings between snapshots may be missed.} Median inter-update
+gaps range from 11.5 to 48.0 seconds.
 
-\textbf{No economic evaluation.} We do not model fees, spread capture, queue
-position, adverse selection or trading profitability. AUC is not a measure of
-expected return.
+\textbf{Observability selection.} Rows without a subsequent observation inside
+the horizon are dropped, and event-driven update intensity may be state
+dependent.
 
-\textbf{No calibration analysis.} The paper evaluates ranking only.
+\textbf{Two horizons, one venue, one window, three assets.} Generalisation
+beyond the sampled Kraken data is not established.
 
-\textbf{Limited external validity.} The sample covers one venue, three assets,
-one 70.5-day period and two horizons.
+\textbf{One deep architecture.} The LSTM comparison does not establish a broad
+ranking between neural and tree-based models.
 
-\textbf{Limited model search.} The deep-learning comparison uses one LSTM
-architecture and the ETH full-feature LSTM arm appears undertrained.
+\textbf{Bootstrap uncertainty is conditional on the chosen test period and
+block design.} The one-hour paired block bootstrap accounts for short-range
+temporal dependence and snapshot clustering in the realised test set, but it is
+not a substitute for repeated independent market histories. The data span one
+70.5-day window, and confidence intervals therefore should not be interpreted
+as population-wide uncertainty across venues, assets or market regimes.
 
-\textbf{Uncertainty is only partially characterised.} Model-seed dispersion and
-blocked-phase dispersion are reported, but neither is a general sampling
-distribution for the forecasting-ordered effect. The blocked phases share
-training data and the temporal evaluation admits only one chronological test
-period in this sample.
+\textbf{Blocked-split dispersion is not statistical independence.} The ten
+phase rotations share training data and one underlying time series; their
+variation is a split-sensitivity diagnostic rather than a general estimate of
+sampling uncertainty.
 
 \section{Conclusion}
 
-After conditioning on quote side, distance from mid and holding horizon, LOB
-microstructure contains measurable incremental predictive information in this
-sample. Under the primary forecasting-ordered evaluation, the 63-feature
-microstructure model improves AUC by 0.0479 on BTC/USD and 0.0596 on ETH/USD,
-while SOL/USD is 0.0105 below the lookup reference. The SOL result is sensitive
-to partition design: under a blocked information-content diagnostic the gap is
-positive, and it remains positive across all ten block phases.
+Conditional on quote side, distance from mid and holding horizon, LOB
+microstructure adds incremental predictive information about replay-defined
+crossings in this sample. In the primary forecasting-ordered evaluation, the
+63-feature GBT improves AUC over the quote-geometry lookup by 0.0480 on BTC/USD
+and 0.0596 on ETH/USD, with dependence-aware 95\% confidence intervals of
+[0.0400, 0.0551] and [0.0427, 0.0751]. SOL/USD shows -0.0105 with an interval of
+[-0.0283, 0.0075], so the temporal evidence there is inconclusive.
 
-The evidence therefore supports a narrower conclusion than a generic claim that
-``LOB models predict fills.'' Book state adds information beyond quote geometry
-on BTC and ETH in prospective order, while the SOL result shows that the sign
-and magnitude of the measured increment can depend on temporal distribution
-shift. The blocked experiment indicates that microstructure information is
-present in SOL as well, but it does not establish that the information is
-prospectively exploitable.
+The blocked diagnostic shows positive gaps for all three assets across all ten
+phase rotations, suggesting that SOL's temporal result is sensitive to regime
+composition or distribution shift rather than demonstrating a robust absence of
+microstructure information. Because that diagnostic can train on observations
+after the test period, it is not evidence of prospective trading performance.
 
-The practical next question is economic rather than statistical: whether the
-incremental ranking information has value after queue position, fees, spread,
-adverse selection and execution uncertainty. This paper does not answer that
-question.
+The empirical effect is modest and should not be confused with profitability or
+realised execution advantage. The broader methodological lesson is that simple
+baselines, dependence-aware uncertainty, explicit split diagnostics and positive
+controls materially change what can be claimed from a market-prediction
+pipeline.
 
 \section*{Data and Code Availability}
 \addcontentsline{toc}{section}{Data and Code Availability}
 
-The collection pipeline, label builder, model code, verification scripts and
-reported diagnostics are available at
-\url{https://github.com/juderamcharitar/latency-compensating-mm}.
+The collection pipeline, label builder, models, verification code, bootstrap
+script and diagnostics are available at
+\url{https://github.com/juderamcharitar/latency-compensating-mm}. The raw dataset
+is not included in the repository and is available from the author pending
+deposit in a persistent archive.
 
 \section*{Disclosure of AI Assistance}
 \addcontentsline{toc}{section}{Disclosure of AI Assistance}
 
-The author used Claude (Anthropic) extensively for implementation, diagnostic
-analysis, drafting and revision. AI-generated code contributed to several of the
-pipeline failures described above and AI-assisted diagnosis contributed to
-identifying several of them. The author designed the study, directed the
-analysis, made the substantive research decisions, verified the reported
-results, and accepts responsibility for the content and any errors.
+The author used Claude (Anthropic) extensively throughout this project for
+implementation, diagnostic analysis, and manuscript drafting and revision.
+Several development-stage defects documented above originated in AI-generated
+code, and several were identified through AI-assisted diagnosis. The author
+designed the study, directed the analysis, made all substantive research
+decisions, verified the reported results, and is solely responsible for the
+content and any errors.
 
 \section*{Acknowledgements}
 \addcontentsline{toc}{section}{Acknowledgements}
 
-This work was conducted independently, without institutional funding or
-supervision. The author declares no conflicts of interest and holds no positions
-in any asset discussed.
+This work was conducted independently, without institutional affiliation,
+funding or supervision. The author declares no conflicts of interest and holds
+no positions in any asset discussed.
 
-\bibliography{../paper_v4/refs}
+\bibliography{refs}
 
 \end{document}
